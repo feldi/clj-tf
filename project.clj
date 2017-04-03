@@ -11,7 +11,10 @@
   ;; :native-path "resources/jni"
   :jvm-opts ["-Djava.library.path=resources/jni"]
   ;;:java-source-paths ["target/protosrc/org/tensorflow/framework"]
+  
   :protobuf-version "3.2.0"
   :protoc "D:/dev/protoc-3.2.0-win32/bin/protoc"
   :proto-path "resources/proto"
+  
+  :profiles {:dev {:source-paths ["dev-resources"]}}
 )
