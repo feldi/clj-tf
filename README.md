@@ -1,6 +1,6 @@
 # clj-tf
 
-A Clojure library for using Tensorflow.
+A Clojure library for using TensorFlow.
 
 
 ## Getting started
@@ -11,8 +11,7 @@ Add the following to your `project.clj` file:
 
 ```clj
  :dependencies [
-  ...
-  [clj-tf/clj-tf "0.1.0"]
+   [clj-tf/clj-tf "0.1.0"]
 ]
 ```
 
