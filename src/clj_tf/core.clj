@@ -1,6 +1,6 @@
 (ns clj-tf.core
    ^{:author "Peter Feldtmann"
-     :doc "A Clojure library for using Tensorflow."}
+     :doc "A Clojure library for using TensorFlow."}
     (:require [clojure.walk :as walk])
     (:import  [org.tensorflow 
                DataType Graph Operation OperationBuilder Output Shape
@@ -15,7 +15,7 @@
 ;;;; Data structures
 
 (def dtype 
-  "Tensorflow Data Types.
+  "TensorFlow Data Types.
    Access it like so: (tf/dtype :float)"
   {
   ; 32-bit single precision floating point.
@@ -85,7 +85,7 @@
   (TensorFlow/version))
 
 (defn destroy
-  "Close a Tensorflow session, graph, or tensor after usage.
+  "Close a TensorFlow session, graph, or tensor after usage.
   Not needed if you use the with-* forms."
   [^AutoCloseable obj]
   (.close obj))

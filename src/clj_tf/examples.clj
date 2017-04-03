@@ -8,7 +8,7 @@
 
 (defn print-version
   "Very simple first test:
-  Get the version of the underlying Tensorflow implementation."
+  Get the version of the underlying TensorFlow implementation."
   []
   (println "Using TensorFlow version" (tf/get-version)))
 
@@ -21,7 +21,7 @@
   []
   (tf/with-new-graph g
     (let [msg 
-          (str "Hello from Tensorflow version " (tf/get-version) "!")
+          (str "Hello from TensorFlow version " (tf/get-version) "!")
           
           ;; Construct the computation graph with a single operation, a constant
           ;; named "MyConst" with a value "msg".
