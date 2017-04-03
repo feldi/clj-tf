@@ -1,7 +1,7 @@
 # clj-tf
 
 A Clojure library for using TensorFlow.
-
+Still work in progress, like the TensorFlow Java API itself!
 
 ## Getting started
 
@@ -14,6 +14,7 @@ Add the following to your `project.clj` file:
    [clj-tf/clj-tf "0.1.0"]
 ]
 ```
+For the moment, you have to clone this project and install it locally on your machine.
 
 
 ## Usage
