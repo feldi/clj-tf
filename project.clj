@@ -17,4 +17,6 @@
   :proto-path "resources/proto"
   
   :profiles {:dev {:source-paths ["dev-resources"]}}
+  ;; these ones are too big for clojars.org:
+  :jar-exclusions  [#"\.dll$" #"\.pb$"]
 )

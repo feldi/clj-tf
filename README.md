@@ -15,7 +15,16 @@ Add the following to your `project.clj` file:
     [clj-tf/clj-tf "0.1.0"]
    ]
 ```
-For the moment, you have to clone this project and install it locally on your machine.
+Clojars.org/repo has a size limit for uploaded artifacts of 20 MB.
+Therefore, I cannot provide some necessary things:
+
+Try to get the native TensorFlow lib,
+tensorflow_jni.dll (Windows) or tensorflow_jni.so (Linux) 
+from the web and put it in the folder resources/jni.
+ 
+For one of the examples, 
+try to get tensorflow_inception_graph. pb 
+from the web and put it in the folder resources/inception. 
 
 
 ## Usage
