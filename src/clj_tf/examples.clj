@@ -27,13 +27,13 @@
           ;; named "MyConst" with a value "msg".
           value (tf/make-tensor-from-string msg)
           
-          _ (tf/tf-const-tensor g "MyConst" value)
+          _ (tf/const-tensor g "MyConst" value)
           
           ;; Execute the "MyConst" operation in a Session.
           result
           (tf/run-and-process g :fetches ["MyConst"])
           ]
-      (println (tf/tensor->string result))
+      (println (tf/->string result))
       (tf/destroy result))))
 
 ;;---------------------------------------------------------------------------
@@ -77,11 +77,11 @@
     #_(tf/run-and-process-simple-session g 
                                         "output"
                                         "input" image-tensor
-                                        #(first (tf/tensor->floats (first %))))
+                                        #(first (tf/->floats (first %))))
      (tf/run-and-process g 
                 :fetches ["output"]
                 :feeds [["input" image-tensor]]
-                :proc-fn #(first (tf/tensor->floats (first %))))))
+                :proc-fn #(first (tf/->floats (first %))))))
  
 (defn- construct-and-execute-graph-to-normalize-image
   [imageBytes]
@@ -100,20 +100,21 @@
 ;         Since the graph is being constructed once per execution here, we can use a constant for the
 ;         input image. If the graph were to be re-used for multiple input images, a placeholder would
 ;         have been more appropriate.
-          input (tf/tf-constant g "input" imageBytes)
+          input 
+          (tf/constant g "input" imageBytes)
           
           output
-          (tf/tf-div g 
-                  (tf/tf-sub g
-                      (tf/tf-resize-bilinear g
-                           (tf/tf-expand-dims g
-                                   (tf/tf-cast g
-                                        (tf/tf-decode-jpeg g input (long 3))
-                                        (tf/dtype :float))
-                                    (tf/tf-constant g "make_batch" (int 0)))
-                           (tf/tf-constant g "size", (int-array [h w])))                  
-                       (tf/tf-constant g "mean" mean))
-                  (tf/tf-constant g "scale" scale))
+          (tf/div g 
+              (tf/sub g
+                  (tf/resize-bilinear g
+                      (tf/expand-dims g
+                          (tf/cast g
+                             (tf/decode-jpeg g input (long 3))
+                             (tf/dtype :float))
+                          (tf/constant g "make_batch" (int 0)))
+                      (tf/constant g "size", (int-array [h w])))                  
+                  (tf/constant g "mean" mean))
+              (tf/constant g "scale" scale))
           ]
       #_(tf/run-and-process-simple-session g
                                          (-> output tf/get-output-op tf/get-op-name)

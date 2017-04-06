@@ -1,4 +1,4 @@
-(defproject clj-tf "0.1.0"
+(defproject clj-tf "0.1.1"
   :description "Using Tensorflow with Clojure"
   :url "https://github.com/feldi/clj-tf"
   :license {:name "Eclipse Public License"

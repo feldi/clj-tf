@@ -3,12 +3,14 @@
      :doc "A Clojure library for using TensorFlow."}
     (:require [clojure.walk :as walk])
     (:import  [org.tensorflow 
-               DataType Graph Operation OperationBuilder Output Shape
+               DataType Graph Operation OperationBuilder Output 
+               SavedModelBundle Shape
                Session Session$Runner Tensor TensorFlow]
               [org.tensorflow.framework OpList OpList$Builder OpDef]
               [com.google.protobuf TextFormat]
               [java.lang AutoCloseable]
-              [java.nio.file Files Paths]))
+              [java.nio.file Files Paths])
+     (:refer-clojure :exclude [cast ]))
 
 (set! *warn-on-reflection* true)
 
@@ -18,33 +20,33 @@
   "TensorFlow Data Types.
    Access it like so: (tf/dtype :float)"
   {
-  ; 32-bit single precision floating point.
-  :float  DataType/FLOAT
-  ; 64-bit double precision floating point.
-  :double DataType/DOUBLE
-  ; 32-bit signed integer.
-  :int32 DataType/INT32
-  ; 8-bit unsigned integer.
-  :uint8 DataType/UINT8
-  ; A sequence of bytes.
-  :string DataType/STRING
-  ; 64-bit signed integer.
-  :int64 DataType/INT64
-  ; Boolean.
-  :bool DataType/BOOL
-})
+   ; 32-bit single precision floating point.
+   :float  DataType/FLOAT
+   ; 64-bit double precision floating point.
+   :double DataType/DOUBLE
+   ; 32-bit signed integer.
+   :int32 DataType/INT32
+   ; 8-bit unsigned integer.
+   :uint8 DataType/UINT8
+   ; A sequence of bytes.
+   :string DataType/STRING
+   ; 64-bit signed integer.
+   :int64 DataType/INT64
+   ; Boolean.
+   :bool DataType/BOOL
+   })
 
 ;;; Management
 
-(def ^:dynamic *graph*
-  "The current graph. See with-(new-)graph."
-  (atom nil))
+#_(def ^:dynamic *graph*
+   "The current graph. See with-(new-)graph."
+   (atom nil))
 
-(def ^:dynamic *session*
+#_(def ^:dynamic *session*
   "The current session. See with-(new-)session."
   (atom nil))
 
-(def ^:dynamic *tensor*
+#_(def ^:dynamic *tensor*
   "The current tensor. See with-(new-)tensor."
   (atom nil))
 
@@ -64,6 +66,11 @@
   `(with-open [~name (Session. ~graph)]
      ~@body))
 
+(defmacro with-session
+  [^String name ^Session s & body]
+  `(with-open [~name s]
+     ~@body))
+
 (defmacro with-new-tensor
   [^String name value & body]
   `(with-open [~name (Tensor/create ~value)]
@@ -76,6 +83,11 @@
        ~@body
      (finally (.close ~name)))))
 
+(defmacro with-saved-model-bundle
+  [^String name ^SavedModelBundle bundle & body]
+  `(with-open [~name bundle]
+     ~@body))
+
 
 ;;;; Misc
 
@@ -85,39 +97,10 @@
   (TensorFlow/version))
 
 (defn destroy
-  "Close a TensorFlow session, graph, or tensor after usage.
+  "Close a TensorFlow session, graph, tensor, or savedModelBundle after usage.
   Not needed if you use the with-* forms."
   [^AutoCloseable obj]
   (.close obj))
-
-
-;; misc. experiments, ignore this:
-
-;(defn normalize-string 
-;  "Removes a trailing ':' from a string."  
-;  [s]
-;  (if (clojure.string/ends-with? s ":")
-;    (clojure.string/join (butlast s))
-;     s))
-;
-;(defn tokenize-string
-;  "Split string into tokens."
-;  [s]
-;   (map (comp clojure.string/trim-newline normalize-string)
-;        (filter (complement clojure.string/blank?) 
-;  (-> s 
-;    ;;(clojure.string/replace #"\n\r" " ")
-;    ;;(clojure.string/replace #"\"" "'")
-;    ;;(clojure.string/replace #" " ";")
-;    (clojure.string/split #"\s+")
-;   ))
-;    )
-;  )
-;
-;(defn escape-hiphens
-;  [s]
-;   (clojure.string/replace s #"\"" "'"))
-
 
 (defn get-all-ops 
   "Get a list of all registered operation definitions,
@@ -185,6 +168,7 @@
   [^Graph g ^String name]
   (.operation g name))
 
+
 ;;;; Tensor
 
 (defn make-tensor
@@ -199,14 +183,66 @@
   [^Tensor ts]
    (.shape ts))
 
-(defn tensor->floats
+(defn get-dtype
+  [^Tensor ts]
+   (.dataType ts))
+
+(defn get-num-dimensions
+  [^Tensor ts]
+   (.numDimensions ts))
+
+(defn get-rank
+  [^Tensor ts]
+   (.numDimensions ts))
+
+(defn get-num-byte
+  [^Tensor ts]
+   (.numBytes ts))
+
+(defn get-num-elements
+  [^Tensor ts]
+   (.numElements ts))
+
+(defn get-shape
+  [^Tensor ts]
+   (.shape ts))
+
+(defn ->float
+  [^Tensor ts]
+   (.floatValue ts))
+
+(defn ->double
+  [^Tensor ts]
+   (.doubleValue ts))
+
+(defn ->int
+  [^Tensor ts]
+   (.intValue ts))
+
+(defn ->long
+  [^Tensor ts]
+   (.longValue ts))
+
+(defn ->boolean
+  [^Tensor ts]
+   (.booleanValue ts))
+
+(defn ->bytes
+  [^Tensor ts]
+   (.bytesValue ts))
+
+(defn ->string
+  [^Tensor ts]
+   (String. (.bytesValue ts) "UTF-8"))
+
+(defn copy-to
+  [^Tensor ts target]
+   (.copyTo ts target))
+
+(defn ->floats
   [^Tensor ts]
   (let [float-arr (apply make-float-array (get-shape ts))]
   (.copyTo ts float-arr)))
-
-(defn tensor->string
-  [^Tensor ts]
-   (String. (.bytesValue ts) "UTF-8"))
 
 
 ;;;; Output
@@ -223,6 +259,10 @@
   [^Output o]
   (.shape o))
 
+(defn get-output-dtype
+  [^Output o]
+  (.dataType o))
+
 
 ;;;; Shape
 
@@ -237,6 +277,15 @@
 (defn make-shape
   [& dimSize]
   (Shape/make (first dimSize) (long-array (rest dimSize))))
+
+(defn get-shape-num-dimensions
+  [^Shape s]
+   (.numDimensions s))
+
+(defn get-shape-size-of-dimension
+  [^Shape s idx]
+   (.size s idx))
+
 
 ;;; Operation
 
@@ -256,7 +305,7 @@
   [^Operation op index]
   (:output op index))
 
-(defn ^Output tf-binary-op 
+(defn ^Output binary-op 
   [^Graph g ^String typ ^Output in1 ^Output in2]
   (-> g
     (.opBuilder typ typ)
@@ -265,7 +314,7 @@
     (.build)
     (.output 0)))
 
-(defn ^Output tf-const-tensor 
+(defn ^Output const-tensor 
   [^Graph g ^String name ^Tensor value]
     (-> g
       (.opBuilder "Const" name)
@@ -273,7 +322,7 @@
       (.setAttr "value" value)
       (.build)))
 
-(defn ^Output tf-constant 
+(defn ^Output constant 
   [^Graph g ^String name value]
   (with-new-tensor ts value
     (-> g
@@ -283,7 +332,7 @@
       (.build)
       (.output 0))))
 
-(defn ^Output tf-decode-jpeg 
+(defn ^Output decode-jpeg 
   [^Graph g ^Output contents ^long channels]
  ;; (println "contents: " contents)
     (-> g
@@ -293,7 +342,7 @@
       (.build)
       (.output 0)))
     
-(defn ^Output tf-cast 
+(defn ^Output cast 
   [^Graph g ^Output value ^DataType dtype]
     (-> g
       (.opBuilder "Cast" "Cast")
@@ -302,58 +351,33 @@
       (.build)
       (.output 0)))
 
-(defn ^Output tf-div
+(defn ^Output div
   [^Graph g ^Output x ^Output y]
-  (tf-binary-op g "Div" x y))
+  (binary-op g "Div" x y))
 
-(defn ^Output tf-sub
+(defn ^Output sub
   [^Graph g ^Output x ^Output y]
-  (tf-binary-op g "Sub" x y))
+  (binary-op g "Sub" x y))
 
-(defn ^Output tf-resize-bilinear
+(defn ^Output resize-bilinear
   [^Graph g ^Output images ^Output size]
-  (tf-binary-op g "ResizeBilinear" images size))
+  (binary-op g "ResizeBilinear" images size))
 
-(defn ^Output tf-expand-dims
+(defn ^Output expand-dims
   [^Graph g ^Output x ^Output dim]
-  (tf-binary-op g "ExpandDims" x dim))
+  (binary-op g "ExpandDims" x dim))
 
 
-;;;; Session and run management
+;;;; Session
 
-;(defn ^Session$Runner add-single-fetch
-;  [^Session$Runner runner fetch]
-;  (.fetch runner fetch 0))
-;
-;(defn ^Session$Runner add-single-feed
-;  [^Session$Runner runner feed-key feed-value]
-;  (.feed runner feed-key 0 feed-value))
+(defn make-session
+  ([^Graph g]
+  (Session. g))
+  ([^Graph g config]
+  (Session. g config)))
 
-#_(defn run-simple-session
-    "Runs selected fetch in new session."
-   [^Graph g fetch feed-key feed-value]
-    (with-new-session s g
-      (let [^Session$Runner runner (.runner s)]
-     (cond-> runner
-             fetch    (add-single-fetch fetch)
-            feed-key (add-single-feed feed-key feed-value))
-     (.run runner))))
 
-#_(defn run-and-process-simple-session
-   "Runs selected fetch in new session, then processes
-   the result if non-nil via provided processor-method."
-  [^Graph g fetch feed-key feed-value processor-method]
-   (with-new-session s g
-     (let [^Session$Runner runner
-            (.runner s)
-            result
-           (cond-> runner
-             fetch    (add-single-fetch fetch)
-             feed-key (add-single-feed feed-key feed-value)
-              true     (.run))]
-     (if (and result processor-method) 
-        (processor-method result)
-        result))))
+;;;; Session run management
 
 (defn run-and-process
    "Run selected fetches in new session, providing optional feeds and targets, 
@@ -391,4 +415,100 @@
           (proc-fn result)
           result)))))
 
+(defn ^Session$Runner add-single-fetch
+  [^Session$Runner runner fetch]
+  (.fetch runner fetch 0))
+
+(defn ^Session$Runner add-single-feed
+  [^Session$Runner runner feed-key feed-value]
+  (.feed runner feed-key 0 feed-value))
+
+(defn run-simple-session
+  "Runs selected fetch in new session."
+  [^Graph g fetch feed-key feed-value]
+  (with-new-session s g
+    (let [^Session$Runner runner (.runner s)]
+      (cond-> runner
+        fetch    (add-single-fetch fetch)
+        feed-key (add-single-feed feed-key feed-value))
+      (.run runner))))
+
+(defn run-and-process-simple-session
+   "Runs selected fetch in new session, then processes
+   the result if non-nil via provided processor funtion."
+  [^Graph g fetch feed-key feed-value proc-fn]
+  (with-new-session s g
+    (let [^Session$Runner runner
+          (.runner s)
+          result
+          (cond-> runner
+            fetch    (add-single-fetch fetch)
+            feed-key (add-single-feed feed-key feed-value)
+            true     (.run))]
+      (if (and result proc-fn) 
+        (proc-fn result)
+        result))))
+
+
+;;;; Saved Model Bundle
+
+;  A saved model bundle represents a model loaded from storage.
+; 
+;  <p>The model consists of a description of the computation (a {@link Graph}), a {@link Session}
+;  with tensors (e.g., parameters or variables in the graph) initialized to values saved in storage,
+;  and a description of the model (a serialized representation of a <a
+;  href="https://www.tensorflow.org/code/tensorflow/core/protobuf/meta_graph.proto">MetaGraphDef
+;  protocol buffer</a>).
+
+;; see also function: with-saved-model-bundle
+
+(defn load-saved-model-bundle
+  "Load a saved model from an export directory. The model that is being loaded should be created using
+   the <a href='https://www.tensorflow.org/api_docs/python/tf/saved_model'>Saved Model API</a>."
+  [export-dir & tags]
+  (SavedModelBundle/load export-dir (make-array String tags)))
+
+(defn get-meta-graph-def-from-bundle
+  "Returns the serialized <a
+   href='https://www.tensorflow.org/code/tensorflow/core/protobuf/meta_graph.proto'>MetaGraphDef
+   protocol buffer</a> associated with the saved model."
+  [^SavedModelBundle smb]
+  (.metaGraphDef smb))
+  
+(defn get-graph-from-bundle
+  "Returns the graph that describes the computation performed by the model."
+  [^SavedModelBundle smb]
+  (.graph smb))
+
+(defn get-session-from-bundle
+  "Returns the session with which to perform computation using the model."
+  [^SavedModelBundle smb]
+  (.session smb))
+
+
+
+
+;; misc. experiments, ignore this:
+
+;(defn normalize-string 
+;  "Removes a trailing ':' from a string."  
+;  [s]
+;  (if (clojure.string/ends-with? s ":")
+;    (clojure.string/join (butlast s))
+;     s))
+;
+;(defn tokenize-string
+;  "Split string into tokens."
+;  [s]
+;   (map (comp clojure.string/trim-newline normalize-string)
+;        (filter (complement clojure.string/blank?) 
+;  (-> s 
+;    ;;(clojure.string/replace #"\n\r" " ")
+;    ;;(clojure.string/replace #"\"" "'")
+;    ;;(clojure.string/replace #" " ";")
+;    (clojure.string/split #"\s+")
+;   ))
+;    )
+;  )
+;
  
