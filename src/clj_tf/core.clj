@@ -38,6 +38,14 @@
 
 ;;; Management
 
+(def ^:dynamic *root-scope*
+   "The root name scope for operation definitions. See with-root-scope."
+   (atom "root"))
+
+(def ^:dynamic *sub-scope*
+   "The current sub scope for operation definitions. See with-sub-scope."
+   (atom nil))
+
 #_(def ^:dynamic *graph*
    "The current graph. See with-(new-)graph."
    (atom nil))
@@ -287,11 +295,60 @@
    (.size s idx))
 
 
+;;; Name scope for operations
+
+(defn build-scope-path-part
+  [^String name]
+  (if (or (clojure.string/blank? name)
+          (clojure.string/ends-with? name "/"))
+    name
+    (str name "/")))
+
+(defn make-scoped-op-name
+  [^String op-name]
+  (cond->
+    ""
+    @*root-scope* (str (build-scope-path-part @*root-scope*))
+    @*sub-scope* (str (build-scope-path-part @*sub-scope*))
+    true (str op-name)))
+  
+(defmacro with-root-scope
+  [^String root-scope-name & body]
+  `(binding [*root-scope* (atom ~root-scope-name)]
+     ~@body))
+
+(defmacro without-root-scope
+  [& body]
+  `(binding [*root-scope* (atom "")]
+     ~@body))
+
+(defmacro with-sub-scope
+  [^String sub-scope-name & body]
+  `(binding [*sub-scope* (atom ~sub-scope-name)]
+     ~@body))
+
+(defn get-scope-parts
+ [^String scope]
+ (clojure.string/split scope #"/"))
+
+(defn extract-op-name
+ [^String scope-name]
+ (last (get-scope-parts scope-name)))
+
+(defn extract-scope-name
+ [^String op-name]
+ (->> (get-scope-parts op-name) butlast (clojure.string/join "/")))
+
+
 ;;; Operation
 
 (defn get-op-name
   [^Operation op]
   (.name op))
+
+(defn get-raw-op-name
+  [^Operation op]
+  (extract-op-name (.name op)))
 
 (defn get-op-type
   [^Operation op]
@@ -306,9 +363,9 @@
   (:output op index))
 
 (defn ^Output binary-op 
-  [^Graph g ^String typ ^Output in1 ^Output in2]
+  [^Graph g ^String type ^Output in1 ^Output in2]
   (-> g
-    (.opBuilder typ typ)
+    (.opBuilder type (make-scoped-op-name type))
     (.addInput in1)
     (.addInput in2)
     (.build)
@@ -317,7 +374,7 @@
 (defn ^Output const-tensor 
   [^Graph g ^String name ^Tensor value]
     (-> g
-      (.opBuilder "Const" name)
+      (.opBuilder "Const" (make-scoped-op-name name))
       (.setAttr "dtype" (.dataType value))
       (.setAttr "value" value)
       (.build)))
@@ -326,7 +383,7 @@
   [^Graph g ^String name value]
   (with-new-tensor ts value
     (-> g
-      (.opBuilder "Const" name)
+      (.opBuilder "Const" (make-scoped-op-name name))
       (.setAttr "dtype" (.dataType ts))
       (.setAttr "value" ^Tensor ts)
       (.build)
@@ -336,7 +393,7 @@
   [^Graph g ^Output contents ^long channels]
  ;; (println "contents: " contents)
     (-> g
-      (.opBuilder "DecodeJpeg" "DecodeJpeg")
+      (.opBuilder "DecodeJpeg" (make-scoped-op-name "DecodeJpeg"))
       (.addInput contents)
       (.setAttr "channels" channels)
       (.build)
@@ -345,7 +402,7 @@
 (defn ^Output cast 
   [^Graph g ^Output value ^DataType dtype]
     (-> g
-      (.opBuilder "Cast" "Cast")
+      (.opBuilder "Cast" (make-scoped-op-name "Cast"))
       (.addInput value)
       (.setAttr "DstT" dtype)
       (.build)
@@ -397,17 +454,17 @@
     (let [^Session$Runner runner (.runner s)
           ]
       (doseq [i (range (count fetches))] 
-        (.fetch runner ^String (get fetches i) i))
+        (.fetch runner ^String (make-scoped-op-name (get fetches i)) i))
       (doseq [i (range (count fetch-outputs))] 
         (.fetch runner ^Output (get fetch-outputs i) i))
       (doseq [i (range (count feeds))] 
-        (.feed runner ^String (first(get feeds i)) i
-                      ^Tensor (second(get feeds i))))
+        (.feed runner ^String (make-scoped-op-name (first (get feeds i))) i
+                      ^Tensor (second (get feeds i))))
       (doseq [i (range (count feed-outputs))] 
-        (.feed runner ^Output (first(get feed-outputs i))
-                      ^Tensor (second(get feed-outputs i))))
+        (.feed runner ^Output (first (get feed-outputs i))
+                      ^Tensor (second (get feed-outputs i))))
       (doseq [i (range (count targets))]
-        (.addTarget runner ^String (get targets i)))
+        (.addTarget runner ^String (make-scoped-op-name (get targets i))))
       (doseq [i (range (count target-ops))]
         (.addTarget runner ^Operation (get target-ops i)))
       (let [result (.run runner)]
@@ -429,8 +486,8 @@
   (with-new-session s g
     (let [^Session$Runner runner (.runner s)]
       (cond-> runner
-        fetch    (add-single-fetch fetch)
-        feed-key (add-single-feed feed-key feed-value))
+        fetch    (add-single-fetch (make-scoped-op-name fetch))
+        feed-key (add-single-feed (make-scoped-op-name feed-key) feed-value))
       (.run runner))))
 
 (defn run-and-process-simple-session
@@ -442,8 +499,8 @@
           (.runner s)
           result
           (cond-> runner
-            fetch    (add-single-fetch fetch)
-            feed-key (add-single-feed feed-key feed-value)
+            fetch    (add-single-fetch (make-scoped-op-name fetch))
+            feed-key (add-single-feed (make-scoped-op-name feed-key) feed-value)
             true     (.run))]
       (if (and result proc-fn) 
         (proc-fn result)

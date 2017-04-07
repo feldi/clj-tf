@@ -73,20 +73,22 @@
 (defn- execute-inception-graph
   [graph-def image-tensor]
   (tf/with-new-graph g 
-    (tf/import-graph-def g graph-def)
-    #_(tf/run-and-process-simple-session g 
-                                        "output"
-                                        "input" image-tensor
-                                        #(first (tf/->floats (first %))))
-     (tf/run-and-process g 
-                :fetches ["output"]
-                :feeds [["input" image-tensor]]
-                :proc-fn #(first (tf/->floats (first %))))))
+    (tf/without-root-scope
+      (tf/import-graph-def g graph-def)
+      #_(tf/run-and-process-simple-session g 
+                                          "output"
+                                          "input" image-tensor
+                                          #(first (tf/->floats (first %))))
+      (tf/run-and-process g 
+              :fetches ["output"]
+              :feeds [["input" image-tensor]]
+              :proc-fn #(first (tf/->floats (first %)))))))
  
 (defn- construct-and-execute-graph-to-normalize-image
   [imageBytes]
   ;;(println (str imageBytes) (type imageBytes))
-  (tf/with-new-graph g
+  (tf/with-root-scope "construct-and-normalize"
+    (tf/with-new-graph g
 ;      Some constants specific to the pre-trained model at:
 ;       https://storage.googleapis.com/download.tensorflow.org/models/inception5h.zip
 ;       - The model was trained with images scaled to 224x224 pixels.
@@ -120,8 +122,8 @@
                                          (-> output tf/get-output-op tf/get-op-name)
                                          nil nil first)
       (tf/run-and-process g 
-            :fetches [(-> output tf/get-output-op tf/get-op-name)])
-      )))
+            :fetches [(-> output tf/get-output-op
+                        tf/get-raw-op-name)])) )))
 
 ;;---------------------------------------------------------------------------
 ;; run the examples
