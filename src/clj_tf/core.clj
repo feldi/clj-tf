@@ -140,7 +140,7 @@
 
 (defn attr-value->map 
   [^AttrValue attr-value]
-  {:type (.getType attr-value)
+  {:type (.getNumber (.getType attr-value))
    })
 
 (defn attr-def->map
