@@ -21,12 +21,12 @@ Therefore, I cannot provide some necessary things:
 
 Try to get the native TensorFlow lib,
 tensorflow_jni.dll (Windows) or tensorflow_jni.so (Linux) 
-from the web and put it in the folder resources/jni.
+from the web and put it in the folder *resources/jni*.
  
 For one of the examples, 
 try to get tensorflow_inception_graph.pb from the web:
 [TensorFlow inception5h model](https://storage.googleapis.com/download.tensorflow.org/models/inception5h.zip)
-and put it in the folder resources/inception. 
+and put it in the folder *resources/inception*. 
 
 
 ## Usage
