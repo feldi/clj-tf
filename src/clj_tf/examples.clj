@@ -17,6 +17,7 @@
 
 (defn hello-world
   "Hello World example from web page
+   'https://www.tensorflow.org/versions/master/install/install_java'
    'Installing TensorFlow for Java: Validate the installation'."
   []
   (tf/with-new-graph g
@@ -70,20 +71,6 @@
                       (* (get label-probabilities best-label-idx) 100) " %"))
         best-label))))
  
-(defn- execute-inception-graph
-  [graph-def image-tensor]
-  (tf/with-new-graph g 
-    (tf/without-root-scope
-      (tf/import-graph-def g graph-def)
-      #_(tf/run-and-process-simple-session g 
-                                          "output"
-                                          "input" image-tensor
-                                          #(first (tf/->floats (first %))))
-      (tf/run-and-process g 
-              :fetches ["output"]
-              :feeds [["input" image-tensor]]
-              :proc-fn #(first (tf/->floats (first %)))))))
- 
 (defn- construct-and-execute-graph-to-normalize-image
   [imageBytes]
   ;;(println (str imageBytes) (type imageBytes))
@@ -118,12 +105,18 @@
                   (tf/constant g "mean" mean))
               (tf/constant g "scale" scale))
           ]
-      #_(tf/run-and-process-simple-session g
-                                         (-> output tf/get-output-op tf/get-op-name)
-                                         nil nil first)
       (tf/run-and-process g 
-            :fetches [(-> output tf/get-output-op
-                        tf/get-raw-op-name)])) )))
+            :fetches [(-> output tf/get-output-op tf/get-raw-op-name)])) )))
+
+(defn- execute-inception-graph
+  [graph-def image-tensor]
+  (tf/with-new-graph g 
+    (tf/without-root-scope
+      (tf/import-graph-def g graph-def)
+      (tf/run-and-process g 
+              :fetches ["output"]
+              :feeds [["input" image-tensor]]
+              :proc-fn #(first (tf/->floats (first %)))))))
 
 ;;---------------------------------------------------------------------------
 ;; run the examples
