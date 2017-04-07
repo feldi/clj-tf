@@ -6,7 +6,8 @@
                DataType Graph Operation OperationBuilder Output 
                SavedModelBundle Shape
                Session Session$Runner Tensor TensorFlow]
-              [org.tensorflow.framework OpList OpList$Builder OpDef]
+              [org.tensorflow.framework OpList OpList$Builder
+               OpDef OpDef$ArgDef OpDef$AttrDef AttrValue]
               [com.google.protobuf TextFormat]
               [java.lang AutoCloseable]
               [java.nio.file Files Paths])
@@ -110,7 +111,10 @@
   [^AutoCloseable obj]
   (.close obj))
 
-(defn get-all-ops 
+
+;;;; Operation Definitions
+
+(defn get-all-op-defs* 
   "Get a list of all registered operation definitions,
   like TF_GetAllOpList in the C API.
   Useful for auto generating operations."
@@ -121,12 +125,56 @@
         op-list (-> op-list-builder .build .getOpList)]
     op-list))
 
+(def get-all-op-defs (memoize get-all-op-defs*))
+
 (defn get-all-op-names 
   "Get a list of all names of registered operations."
   []
-  (for [^OpDef op (get-all-ops)]
+  (for [^OpDef op (get-all-op-defs)]
     (.getName op)))
 
+(defn get-op-def 
+  "Get operation definition from ops.txt"
+  [op-name]
+  (first (filter #(= (.getName ^OpDef %) op-name ) (get-all-op-defs))))
+
+(defn attr-value->map 
+  [^AttrValue attr-value]
+  {:type (.getType attr-value)
+   })
+
+(defn attr-def->map
+  [^OpDef$AttrDef attr-def]
+  {:name (.getName attr-def)
+   ;; TODO :type (.getType attr-def)
+   :description (.getDescription attr-def)
+   :hasMinimum (.getHasMinimum attr-def)
+   :minimum (.getMinimum attr-def)
+   :allowed-values (attr-value->map (.getAllowedValues attr-def))
+   :default-value (attr-value->map (.getDefaultValue attr-def))
+   })
+
+(defn arg-def->map
+  [^OpDef$ArgDef arg-def]
+  {:name (.getName arg-def)
+   ;; TODO :type (.getType arg-def)
+   :type-attr (.getTypeAttr arg-def)
+   :type-list-attr (.getTypeListAttr arg-def)
+   :type-value (.getTypeValue arg-def)
+   :is-ref (.getIsRef arg-def)
+   })
+
+(defn op-def->map 
+  "Get description map of a tensorFlow operation definition."
+  [op-name]
+  (if-let [^OpDef op-def (get-op-def op-name)]
+    {:name (.getName op-def)
+     :summary (.getSummary op-def)
+     :description (.getDescription op-def)
+     :attributes (mapv attr-def->map (.getAttrList op-def))
+     :inputs (mapv arg-def->map (.getInputArgList op-def))
+     :outputs (mapv arg-def->map (.getOutputArgList op-def))
+     }))
 
 ;;;; Utils
 

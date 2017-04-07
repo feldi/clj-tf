@@ -141,7 +141,10 @@
   ;; funny: Best match is "crossword puzzle", but in a way close indeed ;-)
   (label-image "resources/inception/chessboard.jpg")
   
+  ;; Working with operation definitions (definded in 'ops.pbtxt')
   (tf/get-all-op-names)
+  (tf/op-def->map "Div") 
+
   
   ;; misc. experiments, ignore this:
   
