@@ -25,7 +25,7 @@ from the web and put it in the folder resources/jni.
  
 For one of the examples, 
 try to get tensorflow_inception_graph.pb from the web:
-[TensorFlow models](https://storage.googleapis.com/download.tensorflow.org/models/inception5h.zip)
+[TensorFlow inception5h model](https://storage.googleapis.com/download.tensorflow.org/models/inception5h.zip)
 and put it in the folder resources/inception. 
 
 
