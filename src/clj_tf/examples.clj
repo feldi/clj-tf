@@ -32,7 +32,7 @@
           
           ;; Execute the "MyConst" operation in a Session.
           result
-          (tf/run-and-process g :fetches ["MyConst"])
+          (tf/run-and-process g :fetch "MyConst")
           ]
       (println (tf/->string result))
       (tf/destroy result))))
@@ -115,7 +115,7 @@
       (tf/import-graph-def g graph-def)
       (tf/run-and-process g 
               :fetches ["output"]
-              :feeds [["input" image-tensor]]
+              :feed ["input" image-tensor]
               :proc-fn #(first (tf/->floats (first %)))))))
 
 ;;---------------------------------------------------------------------------

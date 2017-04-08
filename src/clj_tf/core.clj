@@ -484,27 +484,41 @@
 
 ;;;; Session run management
 
+(defn ^Session$Runner add-single-fetch
+  [^Session$Runner runner fetch]
+  (.fetch runner fetch 0))
+
+(defn ^Session$Runner add-single-feed
+  [^Session$Runner runner feed-key feed-value]
+  (.feed runner feed-key 0 feed-value))
+
 (defn run-and-process
    "Run selected fetches in new session, providing optional feeds and targets, 
    then process the result (if non-nil) via provided processor-method."
   [^Graph g 
-   & {:keys [fetches fetch-outputs feeds feed-outputs 
+   & {:keys [fetch fetches fetch-outputs feed feeds feed-outputs 
              targets target-ops proc-fn]
-      :or {fetches []
+      :or {fetch nil
+           fetches []
            fetch-outputs []
+           feed nil
            feeds []
            feed-outputs []
            targets []
            target-ops []
-           proc-fn first
+           proc-fn first ;; defaults to returning first output of result
            }}]
   (with-new-session s g
     (let [^Session$Runner runner (.runner s)
           ]
+      (when fetch
+        (add-single-fetch runner (make-scoped-op-name fetch)))
       (doseq [i (range (count fetches))] 
         (.fetch runner ^String (make-scoped-op-name (get fetches i)) i))
       (doseq [i (range (count fetch-outputs))] 
         (.fetch runner ^Output (get fetch-outputs i) i))
+      (when feed
+        (add-single-feed runner (make-scoped-op-name (first feed)) (second feed)))
       (doseq [i (range (count feeds))] 
         (.feed runner ^String (make-scoped-op-name (first (get feeds i))) i
                       ^Tensor (second (get feeds i))))
@@ -519,14 +533,6 @@
         (if (and result proc-fn) 
           (proc-fn result)
           result)))))
-
-(defn ^Session$Runner add-single-fetch
-  [^Session$Runner runner fetch]
-  (.fetch runner fetch 0))
-
-(defn ^Session$Runner add-single-feed
-  [^Session$Runner runner feed-key feed-value]
-  (.feed runner feed-key 0 feed-value))
 
 (defn run-simple-session
   "Runs selected fetch in new session."
