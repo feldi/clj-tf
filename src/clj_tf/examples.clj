@@ -44,11 +44,11 @@
 
 (defn label-image
   "Example adapted from the original java examples at
-      <tensorflow-project>/java/src/main/java/org/tensorflow/examples/LabelImage.java 
+   <tensorflow-project>/java/src/main/java/org/tensorflow/examples/LabelImage.java 
    which demonstrates a sample use of the TensorFlow Java API
    to label images using a pre-trained model (http://arxiv.org/abs/1512.00567).
    Download the pre-trained inception model from
-      https://storage.googleapis.com/download.tensorflow.org/models/inception5h.zip
+   https://storage.googleapis.com/download.tensorflow.org/models/inception5h.zip
    and unzip it into folder 'resources/inception'.
    <image-file> is the path and name to the JPEG image file you want to label."
   [image-file]
@@ -115,7 +115,7 @@
       (tf/import-graph-def g graph-def)
       (tf/run-and-process g 
               :fetches ["output"]
-              :feed ["input" image-tensor]
+              :feed-dict {"input" image-tensor}
               :proc-fn #(first (tf/->floats (first %)))))))
 
 ;;---------------------------------------------------------------------------

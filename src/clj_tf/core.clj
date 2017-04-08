@@ -521,14 +521,15 @@
    "Run selected fetches in new session, providing optional feeds and targets, 
    then process the result (if non-nil) via provided processor-method."
   [^Graph g 
-   & {:keys [fetch fetches fetch-outputs feed feeds feed-outputs 
+   & {:keys [fetch fetches fetch-outputs
+             feed feed-dict feed-outputs  
              targets target-ops proc-fn]
       :or {fetch nil
            fetches []
            fetch-outputs []
            feed nil
-           feeds []
            feed-outputs []
+           feed-dict {}
            targets []
            target-ops []
            proc-fn first ;; defaults to returning first output of result
@@ -544,12 +545,14 @@
         (.fetch runner ^Output (get fetch-outputs i) i))
       (when feed
         (add-single-feed runner (make-scoped-op-name (first feed)) (second feed)))
-      (doseq [i (range (count feeds))] 
-        (.feed runner ^String (make-scoped-op-name (first (get feeds i))) i
-                      ^Tensor (second (get feeds i))))
-      (doseq [i (range (count feed-outputs))] 
-        (.feed runner ^Output (first (get feed-outputs i))
-                      ^Tensor (second (get feed-outputs i))))
+      (let [feed-dict (vec feed-dict)]
+        (doseq [i (range (count feed-dict))] 
+          (.feed runner ^String (make-scoped-op-name (first (get feed-dict i))) i
+            ^Tensor (second (get feed-dict i)))))
+       (let [feed-outputs (vec feed-outputs)]
+        (doseq [i (range (count feed-outputs))] 
+          (.feed runner ^Output (first (get feed-outputs i))
+            ^Tensor (second (get feed-outputs i)))))
       (doseq [i (range (count targets))]
         (.addTarget runner ^String (make-scoped-op-name (get targets i))))
       (doseq [i (range (count target-ops))]
