@@ -111,7 +111,7 @@
 (defn- execute-inception-graph
   [graph-def image-tensor]
   (tf/with-new-graph g 
-    (tf/without-root-scope
+    (tf/with-root-scope "execute-inception-graph"
       (tf/import-graph-def g graph-def)
       (tf/run-and-process g 
               :fetches ["output"]

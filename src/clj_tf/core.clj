@@ -15,6 +15,9 @@
 
 (set! *warn-on-reflection* true)
 
+(declare get-scope)
+
+
 ;;;; Data structures
 
 (def dtype 
@@ -209,8 +212,12 @@
 ;;;; Graph
 
 (defn import-graph-def
-  [^Graph g graph-def]
-  (.importGraphDef g graph-def))
+  ([^Graph g graph-def]
+    (if (get-scope)
+      (.importGraphDef g graph-def (get-scope))
+      (.importGraphDef g graph-def)))
+   ([^Graph g graph-def scope]
+    (.importGraphDef g graph-def scope)))
 
 (defn ^bytes to-graph-def
   [^Graph g]
@@ -345,6 +352,16 @@
 
 ;;; Name scope for operations
 
+(defn get-root-scope
+  "Get current root part of operation name scope."
+  []
+  @*root-scope*)
+
+(defn get-sub-scope
+  "Get current sub part of operation name scope."
+  []
+  @*sub-scope*)
+
 (defn build-scope-path-part
   [^String name]
   (if (or (clojure.string/blank? name)
@@ -352,27 +369,35 @@
     name
     (str name "/")))
 
+(defn get-scope
+  "Get current root and sub part combination of operation name scope."
+  []
+  (cond->
+    ""
+    (get-root-scope) (str (build-scope-path-part (get-root-scope)))
+    (get-sub-scope)  (str (get-sub-scope))))
+
 (defn make-scoped-op-name
   [^String op-name]
   (cond->
     ""
-    @*root-scope* (str (build-scope-path-part @*root-scope*))
-    @*sub-scope* (str (build-scope-path-part @*sub-scope*))
-    true (str op-name)))
+    (get-scope) (str (build-scope-path-part (get-scope)))
+    true        (str op-name)))
   
 (defmacro with-root-scope
   [^String root-scope-name & body]
   `(binding [*root-scope* (atom ~root-scope-name)]
      ~@body))
 
-(defmacro without-root-scope
-  [& body]
-  `(binding [*root-scope* (atom "")]
-     ~@body))
-
 (defmacro with-sub-scope
   [^String sub-scope-name & body]
   `(binding [*sub-scope* (atom ~sub-scope-name)]
+     ~@body))
+
+(defmacro without-scope
+  [& body]
+  `(binding [*root-scope* (atom "")
+             *sub-scope*  (atom "")]
      ~@body))
 
 (defn get-scope-parts
