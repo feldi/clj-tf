@@ -377,7 +377,7 @@
     (get-root-scope) (str (build-scope-path-part (get-root-scope)))
     (get-sub-scope)  (str (get-sub-scope))))
 
-(defn make-scoped-op-name
+(defn ^String make-scoped-op-name
   [^String op-name]
   (cond->
     ""
@@ -436,9 +436,9 @@
   (:output op index))
 
 (defn ^Output binary-op 
-  [^Graph g ^String type ^Output in1 ^Output in2]
+  [^Graph g ^String type name ^Output in1 ^Output in2]
   (-> g
-    (.opBuilder type (make-scoped-op-name type))
+    (.opBuilder type (make-scoped-op-name name))
     (.addInput in1)
     (.addInput in2)
     (.build)
@@ -450,7 +450,8 @@
       (.opBuilder "Const" (make-scoped-op-name name))
       (.setAttr "dtype" (.dataType value))
       (.setAttr "value" value)
-      (.build)))
+      (.build)
+      (.output 0)))
 
 (defn ^Output constant 
   [^Graph g ^String name value]
@@ -461,6 +462,24 @@
       (.setAttr "value" ^Tensor ts)
       (.build)
       (.output 0))))
+
+(defn ^Output placeholder 
+  [^Graph g ^String name type]
+    (-> g
+      (.opBuilder "Placeholder" (make-scoped-op-name name))
+      (.setAttr "dtype" ^DataType (dtype type))
+      (.build)
+      (.output 0)))
+
+(defn ^Output tf-string-join 
+  [^Graph g ^String name ^Output ins ^String sep]
+    (-> g
+      (.opBuilder "StringJoin" (make-scoped-op-name name))
+      (.addInput (make-tensor ins));; doesn't work, wrong impl of Tensor.create !?!
+      (.setAttr "separator" sep)
+      (.setAttr "N" (count ins))
+      (.build)
+      (.output 0)))
 
 (defn ^Output decode-jpeg 
   [^Graph g ^Output contents ^long channels]
@@ -481,21 +500,35 @@
       (.build)
       (.output 0)))
 
+(defn ^Output add
+  [^Graph g ^Output x ^Output y
+    & {:keys [name]
+       :or {name "add"}}]
+  (binary-op g "Add" name x y))
+
 (defn ^Output div
-  [^Graph g ^Output x ^Output y]
-  (binary-op g "Div" x y))
+  [^Graph g ^Output x ^Output y
+   & {:keys [name]
+       :or {name "div"}}]
+  (binary-op g "Div" name x y))
 
 (defn ^Output sub
-  [^Graph g ^Output x ^Output y]
-  (binary-op g "Sub" x y))
+  [^Graph g ^Output x ^Output y
+   & {:keys [name]
+       :or {name "sub"}}]
+  (binary-op g "Sub" name x y))
 
 (defn ^Output resize-bilinear
-  [^Graph g ^Output images ^Output size]
-  (binary-op g "ResizeBilinear" images size))
+  [^Graph g ^Output images ^Output size
+   & {:keys [name]
+       :or {name "resize-bilinear"}}]
+  (binary-op g "ResizeBilinear" name images size))
 
 (defn ^Output expand-dims
-  [^Graph g ^Output x ^Output dim]
-  (binary-op g "ExpandDims" x dim))
+  [^Graph g ^Output x ^Output dim
+    & {:keys [name]
+       :or {name "expand-dims"}}]
+  (binary-op g "ExpandDims" name x dim))
 
 
 ;;;; Session
@@ -509,13 +542,17 @@
 
 ;;;; Session run management
 
-(defn ^Session$Runner add-single-fetch
+(defn ^Session$Runner add-fetch
   [^Session$Runner runner fetch]
-  (.fetch runner fetch 0))
+  (if (vector? fetch)
+    (.fetch runner (make-scoped-op-name (first fetch)) (second fetch))
+    (.fetch runner (make-scoped-op-name fetch) 0)))
 
-(defn ^Session$Runner add-single-feed
+(defn ^Session$Runner add-feed
   [^Session$Runner runner feed-key feed-value]
-  (.feed runner feed-key 0 feed-value))
+  (if (vector? feed-key)
+    (.feed runner (make-scoped-op-name(first feed-key)) (second feed-key) feed-value)
+    (.feed runner (make-scoped-op-name feed-key) 0 feed-value)))
 
 (defn run-and-process
    "Run selected fetches in new session, providing optional feeds and targets, 
@@ -538,25 +575,24 @@
     (let [^Session$Runner runner (.runner s)
           ]
       (when fetch
-        (add-single-fetch runner (make-scoped-op-name fetch)))
-      (doseq [i (range (count fetches))] 
-        (.fetch runner ^String (make-scoped-op-name (get fetches i)) i))
-      (doseq [i (range (count fetch-outputs))] 
-        (.fetch runner ^Output (get fetch-outputs i) i))
+        (add-fetch runner fetch))
+      
+      (dorun (map #(add-fetch runner %) fetches))
+      
+      (dorun (map #(.fetch runner ^Output %) fetch-outputs))
+      
       (when feed
-        (add-single-feed runner (make-scoped-op-name (first feed)) (second feed)))
-      (let [feed-dict (vec feed-dict)]
-        (doseq [i (range (count feed-dict))] 
-          (.feed runner ^String (make-scoped-op-name (first (get feed-dict i))) i
-            ^Tensor (second (get feed-dict i)))))
-       (let [feed-outputs (vec feed-outputs)]
-        (doseq [i (range (count feed-outputs))] 
-          (.feed runner ^Output (first (get feed-outputs i))
-            ^Tensor (second (get feed-outputs i)))))
-      (doseq [i (range (count targets))]
-        (.addTarget runner ^String (make-scoped-op-name (get targets i))))
-      (doseq [i (range (count target-ops))]
-        (.addTarget runner ^Operation (get target-ops i)))
+        (add-feed runner (first feed) (second feed)))
+      
+      (dorun (map #(add-feed runner (first %) ^Tensor (second %)) feed-dict))
+           
+      (dorun (map #(.feed runner ^Output %1 ^Tensor %2)
+                  (keys feed-outputs)(vals feed-outputs)))
+      
+      (dorun (map #(.addTarget runner (make-scoped-op-name %)) targets))
+      
+      (dorun (map #(.addTarget runner ^Operation %) targets))
+      
       (let [result (.run runner)]
         (if (and result proc-fn) 
           (proc-fn result)
@@ -568,8 +604,8 @@
   (with-new-session s g
     (let [^Session$Runner runner (.runner s)]
       (cond-> runner
-        fetch    (add-single-fetch (make-scoped-op-name fetch))
-        feed-key (add-single-feed (make-scoped-op-name feed-key) feed-value))
+        fetch    (add-fetch (make-scoped-op-name fetch))
+        feed-key (add-feed (make-scoped-op-name feed-key) feed-value))
       (.run runner))))
 
 (defn run-and-process-simple-session
@@ -581,8 +617,8 @@
           (.runner s)
           result
           (cond-> runner
-            fetch    (add-single-fetch (make-scoped-op-name fetch))
-            feed-key (add-single-feed (make-scoped-op-name feed-key) feed-value)
+            fetch    (add-fetch (make-scoped-op-name fetch))
+            feed-key (add-feed (make-scoped-op-name feed-key) feed-value)
             true     (.run))]
       (if (and result proc-fn) 
         (proc-fn result)

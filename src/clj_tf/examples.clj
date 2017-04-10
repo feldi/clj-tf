@@ -39,6 +39,23 @@
 
 ;;---------------------------------------------------------------------------
 
+(defn placeholder-demo
+  "Using tensorFlow placeholders."
+  []
+  (tf/with-new-graph g
+    (let [in1 (tf/placeholder g "x" :float)
+          in2 (tf/placeholder g "y" :float)
+          out (tf/add g in1 in2 :name "z")
+          result
+          (tf/run-and-process g :feed-dict {"x" (tf/make-tensor (float 11))
+                                            "y" (tf/make-tensor (float 22)) }
+                                :fetch "z")
+          ]
+      (println (tf/->float result)) )))
+
+
+;;---------------------------------------------------------------------------
+
 (declare execute-inception-graph 
          construct-and-execute-graph-to-normalize-image)
 
@@ -94,8 +111,8 @@
           
           output
           (tf/div g 
-              (tf/sub g
-                  (tf/resize-bilinear g
+              (tf/sub g 
+                  (tf/resize-bilinear g 
                       (tf/expand-dims g
                           (tf/cast g
                              (tf/decode-jpeg g input (long 3))
@@ -127,6 +144,8 @@
   (print-version)
   
   (hello-world)
+  
+  (placeholder-demo)
   
   ;; is it a mushroom? Yes!
   (label-image "resources/inception/agaric.jpg")
