@@ -28,11 +28,11 @@
           ;; named "MyConst" with a value "msg".
           value (tf/make-tensor-from-string msg)
           
-          _ (tf/const-tensor g "MyConst" value)
+          _ (tf/const-tensor g :my-const value)
           
           ;; Execute the "MyConst" operation in a Session.
           result
-          (tf/run-and-process g :fetch "MyConst")
+          (tf/run-and-process g :fetch :my-const)
           ]
       (println (tf/->string result))
       (tf/destroy result))))
@@ -43,13 +43,13 @@
   "Using tensorFlow placeholders."
   []
   (tf/with-new-graph g
-    (let [in1 (tf/placeholder g "x" :float)
-          in2 (tf/placeholder g "y" :float)
-          out (tf/add g in1 in2 :name "z")
+    (let [in1 (tf/placeholder g :x :float)
+          in2 (tf/placeholder g :y :float)
+          _   (tf/add g in1 in2 :name :z)
           result
-          (tf/run-and-process g :feed-dict {"x" (tf/make-tensor (float 11))
-                                            "y" (tf/make-tensor (float 22)) }
-                                :fetch "z")
+          (tf/run-and-process g :feed-dict {:x (tf/make-tensor (float 11))
+                                            :y (tf/make-tensor (float 22)) }
+                                :fetch :z)
           ]
       (println (tf/->float result)) )))
 
@@ -59,13 +59,13 @@
   "Using tensorFlow variables."
   []
   (tf/with-new-graph g
-    (let [var-x   (tf/variable g "x" :float (tf/make-scalar-shape))
-          const11 (tf/constant g "c11" (float 11))
-          const22 (tf/constant g "c22" (float 22))
-          const4  (tf/constant g "c4"  (float 4))
-          step1   (tf/assign g "s1" var-x const11)              ; x = 11
-          step2   (tf/assign-add g "s2" step1 const22)          ; x = x + 22
-          step3   (tf/assign-sub g "s3" step2 const4)           ; x = x - 4
+    (let [var-x   (tf/variable g :x :float (tf/make-scalar-shape))
+          const11 (tf/constant g :c11 (float 11))
+          const22 (tf/constant g :c22 (float 22))
+          const4  (tf/constant g :c4  (float 4))
+          step1   (tf/assign   g :s1 var-x const11)              ; x = 11
+          step2   (tf/assign-add g :s2 step1 const22)          ; x = x + 22
+          step3   (tf/assign-sub g :s3 step2 const4)           ; x = x - 4
           result  (tf/run-and-process g  :fetch-outputs [step3]); 29
           ]
       (println (tf/->float result)))))
@@ -108,7 +108,7 @@
 (defn- construct-and-execute-graph-to-normalize-image
   [imageBytes]
   ;;(println (str imageBytes) (type imageBytes))
-  (tf/with-root-scope "construct-and-normalize"
+  (tf/with-scope "construct-and-normalize"
     (tf/with-new-graph g
 ;      Some constants specific to the pre-trained model at:
 ;       https://storage.googleapis.com/download.tensorflow.org/models/inception5h.zip
@@ -124,7 +124,7 @@
 ;         input image. If the graph were to be re-used for multiple input images, a placeholder would
 ;         have been more appropriate.
           input 
-          (tf/constant g "input" imageBytes)
+          (tf/constant g :input imageBytes)
           
           output
           (tf/div g 
@@ -134,22 +134,22 @@
                           (tf/cast g
                              (tf/decode-jpeg g input (long 3))
                              (tf/dtype :float))
-                          (tf/constant g "make_batch" (int 0)))
-                      (tf/constant g "size", (int-array [h w])))                  
-                  (tf/constant g "mean" mean))
-              (tf/constant g "scale" scale))
+                          (tf/constant g :make_batch (int 0)))
+                      (tf/constant g :size (int-array [h w])))                  
+                  (tf/constant g :mean mean))
+              (tf/constant g :scale scale))
           ]
       (tf/run-and-process g 
-            :fetches [(-> output tf/get-output-op tf/get-raw-op-name)])) )))
+            :fetches [(-> output tf/get-output-op tf/get-raw-op-name)])))))
 
 (defn- execute-inception-graph
   [graph-def image-tensor]
   (tf/with-new-graph g 
-    (tf/with-root-scope "execute-inception-graph"
-      (tf/import-graph-def g graph-def)
+    (tf/with-scope "execute-inception-graph"
+      (tf/import-from-graph-def g graph-def)
       (tf/run-and-process g 
-              :fetches ["output"]
-              :feed-dict {"input" image-tensor}
+              :fetches [:output]
+              :feed-dict {:input image-tensor}
               :proc-fn #(first (tf/->floats (first %)))))))
 
 ;;---------------------------------------------------------------------------

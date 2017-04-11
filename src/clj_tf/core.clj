@@ -42,13 +42,9 @@
 
 ;;; Management
 
-(def ^:dynamic *root-scope*
-   "The root name scope for operation definitions. See with-root-scope."
-   (atom "root"))
-
-(def ^:dynamic *sub-scope*
-   "The current sub scope for operation definitions. See with-sub-scope."
-   (atom nil))
+(def ^:dynamic *scope*
+   "The name scope for operation definitions. See with-scope."
+   (atom "clj_tf"))
 
 #_(def ^:dynamic *graph*
    "The current graph. See with-(new-)graph."
@@ -211,7 +207,7 @@
 
 ;;;; Graph
 
-(defn import-graph-def
+(defn import-from-graph-def
   ([^Graph g graph-def]
     (if (get-scope)
       (.importGraphDef g graph-def (get-scope))
@@ -219,7 +215,7 @@
    ([^Graph g graph-def scope]
     (.importGraphDef g graph-def scope)))
 
-(defn ^bytes to-graph-def
+(defn ^bytes export-to-graph-def
   [^Graph g]
   (.toGraphDef g))
 
@@ -352,65 +348,32 @@
 
 ;;; Name scope for operations
 
-(defn get-root-scope
-  "Get current root part of operation name scope."
-  []
-  @*root-scope*)
-
-(defn get-sub-scope
-  "Get current sub part of operation name scope."
-  []
-  @*sub-scope*)
-
-(defn build-scope-path-part
-  [^String name]
-  (if (or (clojure.string/blank? name)
-          (clojure.string/ends-with? name "/"))
-    name
-    (str name "/")))
-
 (defn get-scope
-  "Get current root and sub part combination of operation name scope."
+  "Get current operation name scope."
   []
-  (cond->
-    ""
-    (get-root-scope) (str (build-scope-path-part (get-root-scope)))
-    (get-sub-scope)  (str (get-sub-scope))))
+  @*scope*)
 
 (defn ^String make-scoped-op-name
-  [^String op-name]
-  (cond->
-    ""
-    (get-scope) (str (build-scope-path-part (get-scope)))
-    true        (str op-name)))
+  [op-name]
+  (subs (str (keyword (get-scope) (name op-name))) 1))
   
-(defmacro with-root-scope
-  [^String root-scope-name & body]
-  `(binding [*root-scope* (atom ~root-scope-name)]
-     ~@body))
-
-(defmacro with-sub-scope
-  [^String sub-scope-name & body]
-  `(binding [*sub-scope* (atom ~sub-scope-name)]
+(defmacro with-scope
+  [^String scope-name & body]
+  `(binding [*scope* (atom ~scope-name)]
      ~@body))
 
 (defmacro without-scope
   [& body]
-  `(binding [*root-scope* (atom "")
-             *sub-scope*  (atom "")]
+  `(binding [*scope* (atom "")]
      ~@body))
 
-(defn get-scope-parts
- [^String scope]
- (clojure.string/split scope #"/"))
-
 (defn extract-op-name
- [^String scope-name]
- (last (get-scope-parts scope-name)))
+ [full-name]
+ (name (keyword full-name)))
 
 (defn extract-scope-name
- [^String op-name]
- (->> (get-scope-parts op-name) butlast (clojure.string/join "/")))
+ [full-name]
+ (namespace (keyword full-name)))
 
 
 ;;; Operation
@@ -524,7 +487,7 @@
 (defn ^Output decode-jpeg 
   [^Graph g ^Output contents ^long channels]
     (-> g
-      (.opBuilder "DecodeJpeg" (make-scoped-op-name "DecodeJpeg"))
+      (.opBuilder "DecodeJpeg" (make-scoped-op-name "decodeJpeg"))
       (.addInput contents)
       (.setAttr "channels" channels)
       (.build)
@@ -533,7 +496,7 @@
 (defn ^Output cast 
   [^Graph g ^Output value ^DataType dtype]
     (-> g
-      (.opBuilder "Cast" (make-scoped-op-name "Cast"))
+      (.opBuilder "Cast" (make-scoped-op-name "cast"))
       (.addInput value)
       (.setAttr "DstT" dtype)
       (.build)
