@@ -53,6 +53,23 @@
           ]
       (println (tf/->float result)) )))
 
+;;---------------------------------------------------------------------------
+
+(defn variable-demo
+  "Using tensorFlow variables."
+  []
+  (tf/with-new-graph g
+    (let [var-x   (tf/variable g "x" :float (tf/make-scalar-shape))
+          const11 (tf/constant g "c11" (float 11))
+          const22 (tf/constant g "c22" (float 22))
+          const4  (tf/constant g "c4"  (float 4))
+          step1   (tf/assign g "s1" var-x const11)              ; x = 11
+          step2   (tf/assign-add g "s2" step1 const22)          ; x = x + 22
+          step3   (tf/assign-sub g "s3" step2 const4)           ; x = x - 4
+          result  (tf/run-and-process g  :fetch-outputs [step3]); 29
+          ]
+      (println (tf/->float result)))))
+
 
 ;;---------------------------------------------------------------------------
 
@@ -146,6 +163,8 @@
   (hello-world)
   
   (placeholder-demo)
+  
+  (variable-demo)
   
   ;; is it a mushroom? Yes!
   (label-image "resources/inception/agaric.jpg")

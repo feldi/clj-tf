@@ -471,6 +471,46 @@
       (.build)
       (.output 0)))
 
+(defn ^Output variable 
+  "Define a variable with provided data type and shape."
+  [^Graph g ^String name data-type ^Shape shape]
+    (-> g
+      (.opBuilder "VariableV2" (make-scoped-op-name name))
+      (.setAttr "dtype" ^DataType (dtype data-type))
+      (.setAttr "shape" shape)
+      (.build)
+      (.output 0)))
+
+(defn ^Output assign 
+  "Assign a (first or new) value to a variable."
+  [^Graph g ^String name ref ^Output value]
+    (-> g
+      (.opBuilder "Assign" (make-scoped-op-name name))
+      (.addInput ref)
+      (.addInput value)
+      (.build)
+      (.output 0)))
+
+(defn ^Output assign-add 
+  "Add value to the current state of a variable."
+  [^Graph g ^String name ref ^Output value]
+    (-> g
+      (.opBuilder "AssignAdd" (make-scoped-op-name name))
+      (.addInput ref)
+      (.addInput value)
+      (.build)
+      (.output 0)))
+
+(defn ^Output assign-sub 
+  "Subtract value from the current state of a variable."
+  [^Graph g ^String name ref ^Output value]
+    (-> g
+      (.opBuilder "AssignSub" (make-scoped-op-name name))
+      (.addInput ref)
+      (.addInput value)
+      (.build)
+      (.output 0)))
+
 (defn ^Output tf-string-join 
   [^Graph g ^String name ^Output ins ^String sep]
     (-> g
@@ -483,7 +523,6 @@
 
 (defn ^Output decode-jpeg 
   [^Graph g ^Output contents ^long channels]
- ;; (println "contents: " contents)
     (-> g
       (.opBuilder "DecodeJpeg" (make-scoped-op-name "DecodeJpeg"))
       (.addInput contents)
