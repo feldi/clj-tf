@@ -10,6 +10,7 @@
                OpDef OpDef$ArgDef OpDef$AttrDef AttrValue]
               [com.google.protobuf TextFormat]
               [java.lang AutoCloseable]
+              [com.cljtf AutoCloseableList]
               [java.nio.file Files Paths])
      (:refer-clojure :exclude [cast ]))
 
@@ -22,7 +23,7 @@
 
 (def dtype 
   "TensorFlow Data Types.
-   Access it like so: (tf/dtype :float)"
+   Access it like so: (dtype :float)"
   {
    ; 32-bit single precision floating point.
    :float  DataType/FLOAT
@@ -43,7 +44,7 @@
 ;;; Management
 
 (def ^:dynamic *scope*
-   "The name scope for operation definitions. See with-scope."
+   "The name scope for operation definitions. See with-scope et al."
    (atom "clj_tf"))
 
 #_(def ^:dynamic *graph*
@@ -86,10 +87,8 @@
 
 (defmacro with-tensor
   [^String name ^Tensor value & body]
-  `(let [~name ~value]
-     (try
-       ~@body
-     (finally (.close ~name)))))
+  `(with-open [~name ~value]
+       ~@body))
 
 (defmacro with-saved-model-bundle
   [^String name ^SavedModelBundle bundle & body]
@@ -118,7 +117,7 @@
   like TF_GetAllOpList in the C API.
   Useful for auto generating operations."
   []
-  (let [op-list-protobuf-src (slurp "resources/ops.pbtxt")
+  (let [op-list-protobuf-src (slurp "src/main/resources/ops.pbtxt")
         op-list-builder (OpList/newBuilder)
         _  (TextFormat/merge ^java.lang.CharSequence op-list-protobuf-src op-list-builder)
         op-list (-> op-list-builder .build .getOpList)]
@@ -133,7 +132,7 @@
     (.getName op)))
 
 (defn get-op-def 
-  "Get operation definition from ops.txt"
+  "Get operation definition from ops.pbtxt"
   [op-name]
   (first (filter #(= (.getName ^OpDef %) op-name ) (get-all-op-defs))))
 
@@ -147,7 +146,7 @@
   {:name (.getName attr-def)
    ;; TODO :type (.getType attr-def)
    :description (.getDescription attr-def)
-   :hasMinimum (.getHasMinimum attr-def)
+   :has-minimum (.getHasMinimum attr-def)
    :minimum (.getMinimum attr-def)
    :allowed-values (attr-value->map (.getAllowedValues attr-def))
    :default-value (attr-value->map (.getDefaultValue attr-def))
@@ -175,6 +174,7 @@
      :outputs (mapv arg-def->map (.getOutputArgList op-def))
      }))
 
+
 ;;;; Utils
 
 (defn array-as-list
@@ -182,11 +182,11 @@
   [arr]
    (apply list arr))
 
-(defn max-index-of-list
+(defn get-arg-max
   "Get the index of the entry with the highest value."
-  [list-of-values]
+  [^java.util.List list-of-values]
   #_(println "type of list-of-values: " (type list-of-values))
-  (.indexOf ^java.util.List list-of-values (apply max list-of-values)))
+  (.indexOf list-of-values (apply max list-of-values)))
 
 (defn make-float-array
   "Helper: Create an n-dimensional array of Floats."
@@ -205,6 +205,36 @@
     (into [] (line-seq rdr))))
 
 
+;;; Name scope for operations
+
+(defn get-scope
+  "Get current operation name scope."
+  []
+  @*scope*)
+
+(defn ^String make-scoped-op-name
+  [op-name]
+  (subs (str (keyword (get-scope) (name op-name))) 1))
+  
+(defmacro with-scope
+  [^String scope-name & body]
+  `(binding [*scope* (atom ~scope-name)]
+     ~@body))
+
+(defmacro without-scope
+  [& body]
+  `(binding [*scope* (atom "")]
+     ~@body))
+
+(defn extract-op-name
+ [full-name]
+ (name (keyword full-name)))
+
+(defn extract-scope-name
+ [full-name]
+ (namespace (keyword full-name)))
+
+
 ;;;; Graph
 
 (defn import-from-graph-def
@@ -221,11 +251,15 @@
 
 (defn ^OperationBuilder get-op-builder 
   [^Graph g ^String type  ^String name]
-  (.opBuilder g type name))
+  (.opBuilder g type (make-scoped-op-name name)))
 
 (defn get-op-by-name
   [^Graph g ^String name]
-  (.operation g name))
+  (.operation g (make-scoped-op-name name)))
+
+(defn has-node
+  [^Graph g ^String name]
+  (not (nil? (.operation g (make-scoped-op-name name)))))
 
 
 ;;;; Tensor
@@ -254,7 +288,7 @@
   [^Tensor ts]
    (.numDimensions ts))
 
-(defn get-num-byte
+(defn get-num-bytes
   [^Tensor ts]
    (.numBytes ts))
 
@@ -262,13 +296,18 @@
   [^Tensor ts]
    (.numElements ts))
 
-(defn get-shape
-  [^Tensor ts]
-   (.shape ts))
+(defn copy-to
+  [^Tensor ts target]
+   (.copyTo ts target))
 
 (defn ->float
   [^Tensor ts]
    (.floatValue ts))
+
+(defn ->floats
+  [^Tensor ts]
+  (let [float-arr (apply make-float-array (get-shape ts))]
+  (.copyTo ts float-arr)))
 
 (defn ->double
   [^Tensor ts]
@@ -293,15 +332,6 @@
 (defn ->string
   [^Tensor ts]
    (String. (.bytesValue ts) "UTF-8"))
-
-(defn copy-to
-  [^Tensor ts target]
-   (.copyTo ts target))
-
-(defn ->floats
-  [^Tensor ts]
-  (let [float-arr (apply make-float-array (get-shape ts))]
-  (.copyTo ts float-arr)))
 
 
 ;;;; Output
@@ -346,36 +376,6 @@
    (.size s idx))
 
 
-;;; Name scope for operations
-
-(defn get-scope
-  "Get current operation name scope."
-  []
-  @*scope*)
-
-(defn ^String make-scoped-op-name
-  [op-name]
-  (subs (str (keyword (get-scope) (name op-name))) 1))
-  
-(defmacro with-scope
-  [^String scope-name & body]
-  `(binding [*scope* (atom ~scope-name)]
-     ~@body))
-
-(defmacro without-scope
-  [& body]
-  `(binding [*scope* (atom "")]
-     ~@body))
-
-(defn extract-op-name
- [full-name]
- (name (keyword full-name)))
-
-(defn extract-scope-name
- [full-name]
- (namespace (keyword full-name)))
-
-
 ;;; Operation
 
 (defn get-op-name
@@ -398,7 +398,7 @@
   [^Operation op index]
   (:output op index))
 
-(defn ^Output binary-op 
+(defn ^Output make-binary-op 
   [^Graph g ^String type name ^Output in1 ^Output in2]
   (-> g
     (.opBuilder type (make-scoped-op-name name))
@@ -474,7 +474,7 @@
       (.build)
       (.output 0)))
 
-(defn ^Output tf-string-join 
+(defn ^Output string-join 
   [^Graph g ^String name ^Output ins ^String sep]
     (-> g
       (.opBuilder "StringJoin" (make-scoped-op-name name))
@@ -485,20 +485,24 @@
       (.output 0)))
 
 (defn ^Output decode-jpeg 
-  [^Graph g ^Output contents ^long channels]
+  [^Graph g ^Output contents channels
+   & {:keys [name]
+       :or {name "decodeJpeg"}}]
     (-> g
-      (.opBuilder "DecodeJpeg" (make-scoped-op-name "decodeJpeg"))
+      (.opBuilder "DecodeJpeg" (make-scoped-op-name name))
       (.addInput contents)
-      (.setAttr "channels" channels)
+      (.setAttr "channels" (long channels))
       (.build)
       (.output 0)))
     
 (defn ^Output cast 
-  [^Graph g ^Output value ^DataType dtype]
+  [^Graph g ^Output value type
+   & {:keys [name]
+       :or {name "cast"}}]
     (-> g
-      (.opBuilder "Cast" (make-scoped-op-name "cast"))
+      (.opBuilder "Cast" (make-scoped-op-name name))
       (.addInput value)
-      (.setAttr "DstT" dtype)
+      (.setAttr "DstT" ^DataType (dtype type))
       (.build)
       (.output 0)))
 
@@ -506,31 +510,31 @@
   [^Graph g ^Output x ^Output y
     & {:keys [name]
        :or {name "add"}}]
-  (binary-op g "Add" name x y))
+  (make-binary-op g "Add" name x y))
 
 (defn ^Output div
   [^Graph g ^Output x ^Output y
    & {:keys [name]
        :or {name "div"}}]
-  (binary-op g "Div" name x y))
+  (make-binary-op g "Div" name x y))
 
 (defn ^Output sub
   [^Graph g ^Output x ^Output y
    & {:keys [name]
        :or {name "sub"}}]
-  (binary-op g "Sub" name x y))
+  (make-binary-op g "Sub" name x y))
 
 (defn ^Output resize-bilinear
   [^Graph g ^Output images ^Output size
    & {:keys [name]
        :or {name "resize-bilinear"}}]
-  (binary-op g "ResizeBilinear" name images size))
+  (make-binary-op g "ResizeBilinear" name images size))
 
 (defn ^Output expand-dims
   [^Graph g ^Output x ^Output dim
     & {:keys [name]
        :or {name "expand-dims"}}]
-  (binary-op g "ExpandDims" name x dim))
+  (make-binary-op g "ExpandDims" name x dim))
 
 
 ;;;; Session
@@ -574,8 +578,7 @@
            proc-fn first ;; defaults to returning first output of result
            }}]
   (with-new-session s g
-    (let [^Session$Runner runner (.runner s)
-          ]
+    (let [^Session$Runner runner (.runner s)]
       (when fetch
         (add-fetch runner fetch))
       
@@ -608,7 +611,7 @@
       (cond-> runner
         fetch    (add-fetch (make-scoped-op-name fetch))
         feed-key (add-feed (make-scoped-op-name feed-key) feed-value))
-      (.run runner))))
+      (AutoCloseableList. (.run runner)))))
 
 (defn run-and-process-simple-session
    "Runs selected fetch in new session, then processes
@@ -661,8 +664,6 @@
   "Returns the session with which to perform computation using the model."
   [^SavedModelBundle smb]
   (.session smb))
-
-
 
 
 ;; misc. experiments, ignore this:

@@ -14,5 +14,5 @@ pom.xml.asc
 .project
 /bin/
 /dev-resources
-/resources/jni
-/resources/inception/tensorflow_inception_graph.pb
+/src/main/resources/jni
+/src/main/resources/inception/tensorflow_inception_graph.pb

@@ -7,7 +7,7 @@
 ;;---------------------------------------------------------------------------
 
 (defn print-version
-  "Very simple first test:
+  "Very simple first test to check the installation:
   Get the version of the underlying TensorFlow implementation."
   []
   (println "Using TensorFlow version" (tf/get-version)))
@@ -40,12 +40,12 @@
 ;;---------------------------------------------------------------------------
 
 (defn placeholder-demo
-  "Using tensorFlow placeholders."
+  "Example of using tensorFlow placeholders."
   []
   (tf/with-new-graph g
-    (let [in1 (tf/placeholder g :x :float)
-          in2 (tf/placeholder g :y :float)
-          _   (tf/add g in1 in2 :name :z)
+    (let [ph1 (tf/placeholder g :x :float)
+          ph2 (tf/placeholder g :y :float)
+          _   (tf/add g ph1 ph2 :name :z)
           result
           (tf/run-and-process g :feed-dict {:x (tf/make-tensor (float 11))
                                             :y (tf/make-tensor (float 22)) }
@@ -56,7 +56,7 @@
 ;;---------------------------------------------------------------------------
 
 (defn variable-demo
-  "Using tensorFlow variables."
+  "Example of using tensorFlow variables."
   []
   (tf/with-new-graph g
     (let [var-x   (tf/variable g :x :float (tf/make-scalar-shape))
@@ -64,17 +64,17 @@
           const22 (tf/constant g :c22 (float 22))
           const4  (tf/constant g :c4  (float 4))
           step1   (tf/assign   g :s1 var-x const11)              ; x = 11
-          step2   (tf/assign-add g :s2 step1 const22)          ; x = x + 22
-          step3   (tf/assign-sub g :s3 step2 const4)           ; x = x - 4
-          result  (tf/run-and-process g  :fetch-outputs [step3]); 29
+          step2   (tf/assign-add g :s2 step1 const22)            ; x = x + 22
+          step3   (tf/assign-sub g :s3 step2 const4)             ; x = x - 4
+          result  (tf/run-and-process g  :fetch-outputs [step3]) ; 29
           ]
       (println (tf/->float result)))))
 
 
 ;;---------------------------------------------------------------------------
 
-(declare execute-inception-graph 
-         construct-and-execute-graph-to-normalize-image)
+(declare construct-and-execute-graph-to-normalize-image
+         execute-inception-graph )
 
 (defn label-image
   "Example adapted from the original java examples at
@@ -86,8 +86,10 @@
    and unzip it into folder 'resources/inception'.
    <image-file> is the path and name to the JPEG image file you want to label."
   [image-file]
-  (let [graph-def (tf/read-all-bytes "resources/inception/tensorflow_inception_graph.pb")
-        labels (tf/read-all-lines "resources/inception/imagenet_comp_graph_label_strings.txt")
+  (let [graph-def (tf/read-all-bytes
+         "src/main/resources/inception/tensorflow_inception_graph.pb")
+        labels (tf/read-all-lines
+         "src/main/resources/inception/imagenet_comp_graph_label_strings.txt")
         image-bytes (tf/read-all-bytes image-file)]
     (tf/with-tensor image
       (construct-and-execute-graph-to-normalize-image image-bytes)
@@ -95,7 +97,7 @@
             (execute-inception-graph graph-def image)
             
             best-label-idx
-            (tf/max-index-of-list (tf/array-as-list label-probabilities))
+            (tf/get-arg-max (tf/array-as-list label-probabilities))
             
             best-label
             (get labels best-label-idx)
@@ -132,8 +134,8 @@
                   (tf/resize-bilinear g 
                       (tf/expand-dims g
                           (tf/cast g
-                             (tf/decode-jpeg g input (long 3))
-                             (tf/dtype :float))
+                             (tf/decode-jpeg g input 3)
+                             :float)
                           (tf/constant g :make_batch (int 0)))
                       (tf/constant g :size (int-array [h w])))                  
                   (tf/constant g :mean mean))
@@ -167,10 +169,10 @@
   (variable-demo)
   
   ;; is it a mushroom? Yes!
-  (label-image "resources/inception/agaric.jpg")
+  (label-image "src/main/resources/inception/agaric.jpg")
   
   ;; funny: Best match is "crossword puzzle", but in a way close indeed ;-)
-  (label-image "resources/inception/chessboard.jpg")
+  (label-image "src/main/resources/inception/chessboard.jpg")
   
   ;; Working with operation definitions (defined in 'ops.pbtxt')
   (tf/get-all-op-names)
