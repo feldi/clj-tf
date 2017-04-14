@@ -80,16 +80,6 @@
   `(with-open [~name s]
      ~@body))
 
-(defmacro with-new-tensor
-  [^String name value & body]
-  `(with-open [~name (Tensor/create ~value)]
-     ~@body))
-
-(defmacro with-tensor
-  [^String name ^Tensor value & body]
-  `(with-open [~name ~value]
-       ~@body))
-
 (defmacro with-saved-model-bundle
   [^String name ^SavedModelBundle bundle & body]
   `(with-open [~name bundle]
@@ -264,13 +254,26 @@
 
 ;;;; Tensor
 
-(defn make-tensor
-  [obj]
-  (Tensor/create obj))
+(defn tensorize
+  "Make a tensor or a list of tensors from a value or a list of values."
+  [v]
+  (cond
+    (nil? v) nil
+    (instance? Tensor v) v
+    (instance? String v)(Tensor/create (.getBytes ^String v "UTF-8"))
+    (map? v) (map tensorize (val v))
+    (sequential? v) (map tensorize (seq v))
+    :else (Tensor/create v)))
 
-(defn make-tensor-from-string
-  [^String s]
-  (Tensor/create (.getBytes s "UTF-8")))
+(defmacro with-new-tensor
+  [^String name value & body]
+  `(with-open [~name ^Tensor (tensorize ~value)]
+     ~@body))
+
+(defmacro with-tensor
+  [^String name ^Tensor value & body]
+  `(with-open [~name ~value]
+       ~@body))
 
 (defn get-shape
   [^Tensor ts]
@@ -421,8 +424,8 @@
   (with-new-tensor ts value
     (-> g
       (.opBuilder "Const" (make-scoped-op-name name))
-      (.setAttr "dtype" (.dataType ts))
-      (.setAttr "value" ^Tensor ts)
+      (.setAttr "dtype" (.dataType ^Tensor ts))
+      (.setAttr "value"^Tensor ts)
       (.build)
       (.output 0))))
 
@@ -446,7 +449,9 @@
 
 (defn ^Output assign 
   "Assign a (first or new) value to a variable."
-  [^Graph g ^String name ref ^Output value]
+  [^Graph g ref ^Output value
+    & {:keys [name]
+       :or {name "Assign"}}]
     (-> g
       (.opBuilder "Assign" (make-scoped-op-name name))
       (.addInput ref)
@@ -456,7 +461,9 @@
 
 (defn ^Output assign-add 
   "Add value to the current state of a variable."
-  [^Graph g ^String name ref ^Output value]
+  [^Graph g ref ^Output value
+    & {:keys [name]
+       :or {name "AssignAdd"}}]
     (-> g
       (.opBuilder "AssignAdd" (make-scoped-op-name name))
       (.addInput ref)
@@ -466,7 +473,9 @@
 
 (defn ^Output assign-sub 
   "Subtract value from the current state of a variable."
-  [^Graph g ^String name ref ^Output value]
+  [^Graph g ref ^Output value
+   & {:keys [name]
+       :or {name "AssignSub"}}]
     (-> g
       (.opBuilder "AssignSub" (make-scoped-op-name name))
       (.addInput ref)
@@ -475,10 +484,12 @@
       (.output 0)))
 
 (defn ^Output string-join 
-  [^Graph g ^String name ^Output ins ^String sep]
+  [^Graph g ins ^String sep
+   & {:keys [name]
+       :or {name "StringJoin"}}]
     (-> g
       (.opBuilder "StringJoin" (make-scoped-op-name name))
-      (.addInput (make-tensor ins));; doesn't work, wrong impl of Tensor.create !?!
+      (.addInputList (into-array Output ins))
       (.setAttr "separator" sep)
       (.setAttr "N" (count ins))
       (.build)
@@ -511,6 +522,17 @@
     & {:keys [name]
        :or {name "add"}}]
   (make-binary-op g "Add" name x y))
+
+(defn ^Output add-n
+  "Add all input tensors element wise."
+  [^Graph g ins 
+    & {:keys [name]
+       :or {name "addN"}}]
+   (-> g
+      (.opBuilder "addN" (make-scoped-op-name name))
+      (.addInputList (into-array Output ins))
+      (.build)
+      (.output 0)))
 
 (defn ^Output div
   [^Graph g ^Output x ^Output y

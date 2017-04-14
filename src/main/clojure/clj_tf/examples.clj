@@ -26,7 +26,7 @@
           
           ;; Construct the computation graph with a single operation, a constant
           ;; named "MyConst" with a value "msg".
-          value (tf/make-tensor-from-string msg)
+          value (tf/tensorize msg)
           
           _ (tf/const-tensor g :my-const value)
           
@@ -47,11 +47,11 @@
           ph2 (tf/placeholder g :y :float)
           _   (tf/add g ph1 ph2 :name :z)
           result
-          (tf/run-and-process g :feed-dict {:x (tf/make-tensor (float 11))
-                                            :y (tf/make-tensor (float 22)) }
+          (tf/run-and-process g :feed-dict {:x (tf/tensorize (float 11))
+                                            :y (tf/tensorize (float 22)) }
                                 :fetch :z)
           ]
-      (println (tf/->float result)) )))
+      (println (tf/->float result)))))
 
 ;;---------------------------------------------------------------------------
 
@@ -63,13 +63,29 @@
           const11 (tf/constant g :c11 (float 11))
           const22 (tf/constant g :c22 (float 22))
           const4  (tf/constant g :c4  (float 4))
-          step1   (tf/assign   g :s1 var-x const11)              ; x = 11
-          step2   (tf/assign-add g :s2 step1 const22)            ; x = x + 22
-          step3   (tf/assign-sub g :s3 step2 const4)             ; x = x - 4
+          step1   (tf/assign   g   var-x const11 :name :s1)      ; x = 11
+          step2   (tf/assign-add g step1 const22 :name :s2)      ; x = x + 22
+          step3   (tf/assign-sub g step2 const4 :name :s3)       ; x = x - 4
           result  (tf/run-and-process g  :fetch-outputs [step3]) ; 29
           ]
       (println (tf/->float result)))))
 
+;;---------------------------------------------------------------------------
+
+(defn string-join-demo
+  "Example of using a tensor input list."
+  []
+  (tf/with-new-graph g
+    (let [str1 (tf/constant g :str1 "Part1")
+          str2 (tf/constant g :str2 "Part2")
+          str3 (tf/constant g :str3 "Part3")
+          step (tf/string-join g 
+                               [str1 str2 str3] ; Strings to join
+                               ","              ; Separator
+                               :name :step) 
+          result (tf/run-and-process g :fetch :step)
+          ]
+      (println (tf/->string result)))))
 
 ;;---------------------------------------------------------------------------
 
@@ -168,6 +184,8 @@
   
   (variable-demo)
   
+  (string-join-demo)
+  
   ;; is it a mushroom? Yes!
   (label-image "src/main/resources/inception/agaric.jpg")
   
@@ -189,7 +207,7 @@
   (def x1dump (protobuf-dump x1)) ;; byte-array
   (def y (protobuf-load x x1dump)) ;; map
     
-  (def src (slurp "resources/ops.txt"))
+  (def src (slurp "src/main/resources/ops.txt"))
   
   (import org.tensorflow.framework.OpList)
   (def l (protodef org.tensorflow.framework.OpList))

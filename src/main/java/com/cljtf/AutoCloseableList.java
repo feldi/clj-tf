@@ -6,7 +6,7 @@ import java.util.Collection;
 /**
  * @author feldi
  *
- * Adapted from SessionTest.java
+ * Adapted from /tensorflow/java/src/test/java/org/tensorflow/SessionTest.java
  */
 public class AutoCloseableList<E extends AutoCloseable> extends ArrayList<E> 
                                implements AutoCloseable {
