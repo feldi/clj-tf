@@ -12,7 +12,7 @@ Add the following to your `project.clj` file:
 
 ```clj
  :dependencies [
-    [clj-tf "0.1.0"]
+    [clj-tf "0.1.4"]
     ]
 ```
 
