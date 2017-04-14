@@ -32,7 +32,7 @@
           
           ;; Execute the "MyConst" operation in a Session.
           result
-          (tf/run-and-process g :fetch :my-const)
+          (tf/run g :fetch :my-const)
           ]
       (println (tf/->string result))
       (tf/destroy result))))
@@ -47,8 +47,8 @@
           ph2 (tf/placeholder g :y :float)
           _   (tf/add g ph1 ph2 :name :z)
           result
-          (tf/run-and-process g :feed-dict {:x (tf/tensorize (float 11))
-                                            :y (tf/tensorize (float 22)) }
+          (tf/run g :feed-dict {:x (tf/tensorize (float 11))
+                                :y (tf/tensorize (float 22)) }
                                 :fetch :z)
           ]
       (println (tf/->float result)))))
@@ -63,10 +63,10 @@
           const11 (tf/constant g :c11 (float 11))
           const22 (tf/constant g :c22 (float 22))
           const4  (tf/constant g :c4  (float 4))
-          step1   (tf/assign   g   var-x const11 :name :s1)      ; x = 11
-          step2   (tf/assign-add g step1 const22 :name :s2)      ; x = x + 22
-          step3   (tf/assign-sub g step2 const4 :name :s3)       ; x = x - 4
-          result  (tf/run-and-process g  :fetch-outputs [step3]) ; 29
+          step1   (tf/assign   g   var-x const11 :name :s1) ; x = 11
+          step2   (tf/assign-add g step1 const22 :name :s2) ; x = x + 22
+          step3   (tf/assign-sub g step2 const4 :name :s3)  ; x = x - 4
+          result  (tf/run g :fetch-outputs [step3])         ; 29
           ]
       (println (tf/->float result)))))
 
@@ -77,14 +77,14 @@
   []
   (tf/with-new-graph g
     (let [str1 (tf/constant g :str1 "Part1")
-          str2 (tf/constant g :str2 "Part2")
-          str3 (tf/constant g :str3 "Part3")
-          step (tf/string-join g 
-                               [str1 str2 str3] ; Strings to join
-                               ","              ; Separator
-                               :name :step) 
-          result (tf/run-and-process g :fetch :step)
-          ]
+        str2 (tf/constant g :str2 "Part2")
+        str3 (tf/constant g :str3 "Part3")
+        step (tf/string-join g 
+                             [str1 str2 str3] ; Strings to join
+                             ", "             ; Separator
+                             :name :step) 
+          result (tf/run g :fetch :step)
+        ]
       (println (tf/->string result)))))
 
 ;;---------------------------------------------------------------------------
@@ -126,7 +126,7 @@
 (defn- construct-and-execute-graph-to-normalize-image
   [imageBytes]
   ;;(println (str imageBytes) (type imageBytes))
-  (tf/with-scope "construct-and-normalize"
+  (tf/with-name-scope "construct-and-normalize"
     (tf/with-new-graph g
 ;      Some constants specific to the pre-trained model at:
 ;       https://storage.googleapis.com/download.tensorflow.org/models/inception5h.zip
@@ -157,15 +157,14 @@
                   (tf/constant g :mean mean))
               (tf/constant g :scale scale))
           ]
-      (tf/run-and-process g 
-            :fetches [(-> output tf/get-output-op tf/get-raw-op-name)])))))
+      (tf/run g :fetches [(-> output tf/get-output-op tf/get-raw-op-name)])))))
 
 (defn- execute-inception-graph
   [graph-def image-tensor]
   (tf/with-new-graph g 
-    (tf/with-scope "execute-inception-graph"
+    (tf/with-name-scope "execute-inception-graph"
       (tf/import-from-graph-def g graph-def)
-      (tf/run-and-process g 
+      (tf/run g 
               :fetches [:output]
               :feed-dict {:input image-tensor}
               :proc-fn #(first (tf/->floats (first %)))))))

@@ -5,7 +5,7 @@
     (:import  [org.tensorflow 
                DataType Graph Operation OperationBuilder Output 
                SavedModelBundle Shape
-               Session Session$Runner Tensor TensorFlow]
+               Session Session$Runner Session$Run Tensor TensorFlow]
               [org.tensorflow.framework OpList OpList$Builder
                OpDef OpDef$ArgDef OpDef$AttrDef AttrValue]
               [com.google.protobuf TextFormat]
@@ -43,13 +43,13 @@
 
 ;;; Management
 
-(def ^:dynamic *scope*
-   "The name scope for operation definitions. See with-scope et al."
-   (atom "clj_tf"))
+(def ^:dynamic *name-scope*
+  "The name scope for operation definitions. See with-scope et al."
+  (atom "clj_tf"))
 
-#_(def ^:dynamic *graph*
-   "The current graph. See with-(new-)graph."
-   (atom nil))
+(def ^:dynamic *graph*
+  "The current (default) graph."
+  (atom nil))
 
 #_(def ^:dynamic *session*
   "The current session. See with-(new-)session."
@@ -58,32 +58,6 @@
 #_(def ^:dynamic *tensor*
   "The current tensor. See with-(new-)tensor."
   (atom nil))
-
-#_(defmacro with-new-curr-graph 
-  "Eval forms with the a new named graph as current graph." 
-  [^String name & body]
-  `(binding [*graph* (Graph.)]
-    ~@body))
-
-(defmacro with-new-graph
-  [^String name & body]
-  `(with-open [~name (Graph.)]
-     ~@body))
-
-(defmacro with-new-session
-  [^String name ^Graph graph & body]
-  `(with-open [~name (Session. ~graph)]
-     ~@body))
-
-(defmacro with-session
-  [^String name ^Session s & body]
-  `(with-open [~name s]
-     ~@body))
-
-(defmacro with-saved-model-bundle
-  [^String name ^SavedModelBundle bundle & body]
-  `(with-open [~name bundle]
-     ~@body))
 
 
 ;;;; Misc
@@ -197,23 +171,23 @@
 
 ;;; Name scope for operations
 
-(defn get-scope
+(defn get-name-scope
   "Get current operation name scope."
   []
-  @*scope*)
+  @*name-scope*)
 
 (defn ^String make-scoped-op-name
   [op-name]
-  (subs (str (keyword (get-scope) (name op-name))) 1))
+  (subs (str (keyword (get-name-scope) (name op-name))) 1))
   
-(defmacro with-scope
+(defmacro with-name-scope
   [^String scope-name & body]
-  `(binding [*scope* (atom ~scope-name)]
+  `(binding [*name-scope* (atom ~scope-name)]
      ~@body))
 
-(defmacro without-scope
+(defmacro without-name-scope
   [& body]
-  `(binding [*scope* (atom "")]
+  `(binding [*name-scope* (atom "")]
      ~@body))
 
 (defn extract-op-name
@@ -227,13 +201,40 @@
 
 ;;;; Graph
 
+(defn new-graph
+  "Build an empty new graph."
+  []
+  (Graph.))
+
+(defn get-graph
+  "Get current/default graph."
+  []
+  @*graph*)
+
+(defn as-default
+  "Set graph as current/default graph."
+  [^Graph g]
+  (reset! *graph* g))
+
+(defmacro with-graph
+  [^Graph g & body]
+  `(binding [*graph* (atom ~g)]
+     (with-open [~(gensym) ~g]
+     ~@body)))
+
+(defmacro with-new-graph
+  [^String name & body]
+  `(binding [*graph* (atom (new-graph))]
+     (with-open [~name (get-graph)]
+     ~@body)))
+
 (defn import-from-graph-def
   ([^Graph g graph-def]
-    (if (get-scope)
-      (.importGraphDef g graph-def (get-scope))
+    (if (get-name-scope)
+      (.importGraphDef g graph-def (get-name-scope))
       (.importGraphDef g graph-def)))
-   ([^Graph g graph-def scope]
-    (.importGraphDef g graph-def scope)))
+   ([^Graph g graph-def name-scope]
+    (.importGraphDef g graph-def name-scope)))
 
 (defn ^bytes export-to-graph-def
   [^Graph g]
@@ -258,7 +259,7 @@
   "Make a tensor or a list of tensors from a value or a list of values."
   [v]
   (cond
-    (nil? v) nil
+    (nil? v) (Tensor/create (float 0))
     (instance? Tensor v) v
     (instance? String v)(Tensor/create (.getBytes ^String v "UTF-8"))
     (map? v) (map tensorize (val v))
@@ -559,7 +560,17 @@
   (make-binary-op g "ExpandDims" name x dim))
 
 
-;;;; Session
+;;;; Session, Runner, Run
+
+(defmacro with-new-session
+  [^String name ^Graph graph & body]
+  `(with-open [~name (Session. ~graph)]
+     ~@body))
+
+(defmacro with-session
+  [^String name ^Session s & body]
+  `(with-open [~name s]
+     ~@body))
 
 (defn make-session
   ([^Graph g]
@@ -567,8 +578,28 @@
   ([^Graph g config]
   (Session. g config)))
 
+(defn ^Session$Runner new-runner
+  "Create a Runner to execute graph operations and evaluate Tensors.
+   Accepts also options."
+  ([^Session s]
+    (.runner s))
+   ([^Session s ^bytes options]
+    (-> (.runner s) (.setOptions options))))
 
-;;;; Session run management
+(defn set-runner-options 
+  "(Experimental method): set options (typically for debugging) for this run."
+  [^Session$Runner r ^bytes options]
+  (.setOptions r options))
+
+(defn raw-run 
+  "Execute the graph fragments necessary to compute all requested fetches."
+  [^Session$Runner r]
+  (.run r))
+
+(defn ^Session$Run raw-run-and-fetch-metadata 
+  "Execute the graph fragments necessary to compute all requested fetches."
+  [^Session$Runner r]
+  (.runAndFetchMetadata r))
 
 (defn ^Session$Runner add-fetch
   [^Session$Runner runner fetch]
@@ -582,74 +613,80 @@
     (.feed runner (make-scoped-op-name(first feed-key)) (second feed-key) feed-value)
     (.feed runner (make-scoped-op-name feed-key) 0 feed-value)))
 
-(defn run-and-process
-   "Run selected fetches in new session, providing optional feeds and targets, 
-   then process the result (if non-nil) via provided processor-method."
-  [^Graph g 
-   & {:keys [fetch fetches fetch-outputs
-             feed feed-dict feed-outputs  
-             targets target-ops proc-fn]
-      :or {fetch nil
-           fetches []
-           fetch-outputs []
-           feed nil
-           feed-outputs []
-           feed-dict {}
-           targets []
-           target-ops []
-           proc-fn first ;; defaults to returning first output of result
-           }}]
-  (with-new-session s g
-    (let [^Session$Runner runner (.runner s)]
-      (when fetch
-        (add-fetch runner fetch))
+(defn get-run-outputs
+  "Return the tensors from requested fetches."
+  [^Session$Run run]
+  (.outputs run))
+
+(defn ^bytes get-run-metadata
+  "(Experimental): Metadata about the run."
+  [^Session$Run run]
+  (.metadata run))
+
+
+;; session and run management
+
+(defn ^Session$Runner make-runner
+  [^Session s 
+   {:keys [fetch fetches fetch-outputs
+           feed feed-dict feed-outputs  
+           targets target-ops options]
+    :or {fetch nil
+         fetches []
+         fetch-outputs []
+         feed nil
+         feed-outputs []
+         feed-dict {}
+         targets []
+         target-ops []
+         options nil
+         }}]
+  (let [runner (new-runner s)]
+    
+    (when fetch
+      (add-fetch runner fetch))
+    
+    (dorun (map #(add-fetch runner %) fetches))
+    
+    (dorun (map #(.fetch runner ^Output %) fetch-outputs))
+    
+    (when feed
+      (add-feed runner (first feed) (second feed)))
       
-      (dorun (map #(add-fetch runner %) fetches))
-      
-      (dorun (map #(.fetch runner ^Output %) fetch-outputs))
-      
-      (when feed
-        (add-feed runner (first feed) (second feed)))
-      
-      (dorun (map #(add-feed runner (first %) ^Tensor (second %)) feed-dict))
+    (dorun (map #(add-feed runner (first %) ^Tensor (second %)) feed-dict))
            
-      (dorun (map #(.feed runner ^Output %1 ^Tensor %2)
-                  (keys feed-outputs)(vals feed-outputs)))
+    (dorun (map #(.feed runner ^Output %1 ^Tensor %2)
+                (keys feed-outputs)(vals feed-outputs)))
+    
+    (dorun (map #(.addTarget runner (make-scoped-op-name %)) targets))
+    
+    (dorun (map #(.addTarget runner ^Operation %) targets))
+    
+    (when options
+      (set-runner-options runner options))
       
-      (dorun (map #(.addTarget runner (make-scoped-op-name %)) targets))
-      
-      (dorun (map #(.addTarget runner ^Operation %) targets))
-      
-      (let [result (.run runner)]
-        (if (and result proc-fn) 
-          (proc-fn result)
-          result)))))
+    runner))
 
-(defn run-simple-session
-  "Runs selected fetch in new session."
-  [^Graph g fetch feed-key feed-value]
-  (with-new-session s g
-    (let [^Session$Runner runner (.runner s)]
-      (cond-> runner
-        fetch    (add-fetch (make-scoped-op-name fetch))
-        feed-key (add-feed (make-scoped-op-name feed-key) feed-value))
-      (AutoCloseableList. (.run runner)))))
+(defn run*
+  "Run fetches in given session, providing optional feeds and targets."
+  [^Session s kwargs]
+  (raw-run (make-runner s kwargs)))
 
-(defn run-and-process-simple-session
-   "Runs selected fetch in new session, then processes
-   the result if non-nil via provided processor funtion."
-  [^Graph g fetch feed-key feed-value proc-fn]
-  (with-new-session s g
-    (let [^Session$Runner runner
-          (.runner s)
-          result
-          (cond-> runner
-            fetch    (add-fetch (make-scoped-op-name fetch))
-            feed-key (add-feed (make-scoped-op-name feed-key) feed-value)
-            true     (.run))]
-      (if (and result proc-fn) 
-        (proc-fn result)
-        result))))
+(defn run
+   "Run fetches always in new session, providing optional feeds and targets, 
+   then process the result (if non-nil) via provided processor function."
+   [^Graph g 
+    & {:keys [fetch fetches fetch-outputs
+              feed feed-dict feed-outputs  
+              targets target-ops options proc-fn]
+       :as kwargs
+       :or {proc-fn first ;; defaults to returning first output of result
+            }}]
+   (with-new-session s g
+     (let [result (run* s kwargs)]
+       (if (and result proc-fn) 
+         (proc-fn result)
+         result))))
 
 
 ;;;; Saved Model Bundle
@@ -687,28 +724,8 @@
   [^SavedModelBundle smb]
   (.session smb))
 
-
-;; misc. experiments, ignore this:
-
-;(defn normalize-string 
-;  "Removes a trailing ':' from a string."  
-;  [s]
-;  (if (clojure.string/ends-with? s ":")
-;    (clojure.string/join (butlast s))
-;     s))
-;
-;(defn tokenize-string
-;  "Split string into tokens."
-;  [s]
-;   (map (comp clojure.string/trim-newline normalize-string)
-;        (filter (complement clojure.string/blank?) 
-;  (-> s 
-;    ;;(clojure.string/replace #"\n\r" " ")
-;    ;;(clojure.string/replace #"\"" "'")
-;    ;;(clojure.string/replace #" " ";")
-;    (clojure.string/split #"\s+")
-;   ))
-;    )
-;  )
-;
+(defmacro with-saved-model-bundle
+  [^String name ^SavedModelBundle bundle & body]
+  `(with-open [~name bundle]
+     ~@body))
  
