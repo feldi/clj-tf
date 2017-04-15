@@ -41,24 +41,6 @@
    :bool DataType/BOOL
    })
 
-;;; Management
-
-(def ^:dynamic *name-scope*
-  "The name scope for operation definitions. See with-scope et al."
-  (atom "clj_tf"))
-
-(def ^:dynamic *graph*
-  "The current (default) graph."
-  (atom nil))
-
-#_(def ^:dynamic *session*
-  "The current session. See with-(new-)session."
-  (atom nil))
-
-#_(def ^:dynamic *tensor*
-  "The current tensor. See with-(new-)tensor."
-  (atom nil))
-
 
 ;;;; Misc
 
@@ -171,6 +153,10 @@
 
 ;;; Name scope for operations
 
+(def ^{:private true :dynamic true} *name-scope*
+  "The name scope for operation definitions. See with-scope et al."
+  (atom "clj_tf"))
+
 (defn get-name-scope
   "Get current operation name scope."
   []
@@ -201,12 +187,16 @@
 
 ;;;; Graph
 
-(defn new-graph
+(def ^{:private true :dynamic true} *graph*
+  "The current (default) graph."
+  (atom (Graph.)))
+
+(defn ^Graph new-graph
   "Build an empty new graph."
   []
   (Graph.))
 
-(defn get-graph
+(defn ^Graph get-graph
   "Get current/default graph."
   []
   @*graph*)
@@ -562,21 +552,32 @@
 
 ;;;; Session, Runner, Run
 
-(defmacro with-new-session
-  [^String name ^Graph graph & body]
-  `(with-open [~name (Session. ~graph)]
-     ~@body))
-
-(defmacro with-session
-  [^String name ^Session s & body]
-  `(with-open [~name s]
-     ~@body))
-
-(defn make-session
+(defn ^Session make-session
   ([^Graph g]
   (Session. g))
   ([^Graph g config]
   (Session. g config)))
+
+(def ^{:private true :dynamic true} *session*
+  "The current session."
+  (atom nil))
+
+(defn ^Session get-session
+  "Get current session."
+  []
+  @*session*)
+
+(defmacro with-new-session
+  [^String name ^Graph graph & body]
+  ;;`(binding [*session* (make-session ~graph)]
+     `(with-open [~name (make-session ~graph) #_(get-session)]
+       ~@body))
+
+(defmacro with-session
+  [^String name ^Session s & body]
+  `(binding [*session* ~s]
+     (with-open [~name ~s]
+     ~@body)))
 
 (defn ^Session$Runner new-runner
   "Create a Runner to execute graph operations and evaluate Tensors.

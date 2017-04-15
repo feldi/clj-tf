@@ -6,7 +6,7 @@
 
 ;;---------------------------------------------------------------------------
 
-(defn print-version
+(defn print-tensorflow-version
   "Very simple first test to check the installation:
   Get the version of the underlying TensorFlow implementation."
   []
@@ -15,7 +15,7 @@
 
 ;;---------------------------------------------------------------------------
 
-(defn hello-world
+(defn tensorflow-hello-world
   "Hello World example from web page
    'https://www.tensorflow.org/versions/master/install/install_java'
    'Installing TensorFlow for Java: Validate the installation'."
@@ -51,7 +51,7 @@
                                 :y (tf/tensorize (float 22)) }
                                 :fetch :z)
           ]
-      (println (tf/->float result)))))
+      (println "Result should be 33.0, is: " (tf/->float result)))))
 
 ;;---------------------------------------------------------------------------
 
@@ -68,7 +68,7 @@
           step3   (tf/assign-sub g step2 const4 :name :s3)  ; x = x - 4
           result  (tf/run g :fetch-outputs [step3])         ; 29
           ]
-      (println (tf/->float result)))))
+      (println "Result should be 29.0, is: " (tf/->float result)))))
 
 ;;---------------------------------------------------------------------------
 
@@ -85,7 +85,7 @@
                              :name :step) 
           result (tf/run g :fetch :step)
         ]
-      (println (tf/->string result)))))
+      (println "Joint string = "(tf/->string result)))))
 
 ;;---------------------------------------------------------------------------
 
@@ -175,9 +175,9 @@
 
 (comment
   
-  (print-version)
+  (print-tensorflow-version)
   
-  (hello-world)
+  (tensorflow-hello-world)
   
   (placeholder-demo)
   
