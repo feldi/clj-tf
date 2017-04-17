@@ -94,7 +94,7 @@
                                ) 
           result (tf/run :fetch :step)
         ]
-      (println "Joint string = "(tf/->string result)))))
+      (println "Joined string = "(tf/->string result)))))
 
 ;;---------------------------------------------------------------------------
 

@@ -223,8 +223,8 @@
 
 (defmacro with-new-graph
   [^String name & body]
-  `(binding [*graph* (atom (new-graph))]
-     (with-open [~name (get-graph)]
+  `(with-open [~name (new-graph)]
+     (binding [*graph* (atom ~name)]
      ~@body)))
 
 (defn import-from-graph-def
@@ -272,7 +272,7 @@
 
 (defmacro with-tensor
   [^String name ^Tensor value & body]
-  `(with-open [~name (tensorize ~value)]
+  `(with-open [~name ^Tensor (tensorize ~value)]
        ~@body))
 
 (defn get-shape
@@ -390,7 +390,7 @@
   op-builder)
 
 (defn ^OperationBuilder set-device 
-  "Examples for device names: '/cpu:0' or "/gpu:2""
+  "Examples for device names: '/cpu:0' or '/gpu:2'."
   [^OperationBuilder op-builder ^String device]
   (when device
     (.setDevice op-builder device))
@@ -714,15 +714,15 @@
 
 (defmacro with-new-session
   [^String name ^Graph graph & body]
-  ;;`(binding [*session* (make-session ~graph)]
-     `(with-open [~name (make-session ~graph) #_(get-session)]
-       ~@body))
+  `(with-open [~name (make-session ~graph)]
+     (binding [*session* ~name]
+       ~@body)))
 
 (defmacro with-session
   [^String name ^Session s & body]
-  `(binding [*session* ~s]
-     (with-open [~name ~s]
-     ~@body)))
+  `(with-open [~name ~s]
+     (binding [*session* ~s]
+       ~@body)))
 
 (defn ^Session$Runner new-runner
   "Create a Runner to execute graph operations and evaluate Tensors.
