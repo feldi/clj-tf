@@ -87,9 +87,11 @@
           str2 (tf/constant "Part2")
           str3 (tf/constant "Part3")
           step (tf/string-join-op 
-                               [str1 str2 str3] ; Strings to join
+                               [str1 str2 str3] ; the strings to join
                                :separator ", "  
-                               :name :step) 
+                               :name :step
+                               :device "/cpu:0" ; example for device usage
+                               ) 
           result (tf/run :fetch :step)
         ]
       (println "Joint string = "(tf/->string result)))))

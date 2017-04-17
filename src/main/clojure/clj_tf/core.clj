@@ -390,6 +390,7 @@
   op-builder)
 
 (defn ^OperationBuilder set-device 
+  "Examples for device names: '/cpu:0' or "/gpu:2""
   [^OperationBuilder op-builder ^String device]
   (when device
     (.setDevice op-builder device))
@@ -642,14 +643,17 @@
    (println "generating op: " op-name-sym)
    `(do (defn ^{:op-name ~op-name} ~op-name-sym
           [~@(gen-input-arglist inputs)
-           & {:keys [~'graph ~'name ~@(gen-key-names attrs)]
+           & {:keys [~'graph ~'name ~'device
+                     ~@(gen-key-names attrs)]
               :or {~'graph (get-graph)
-                   ~'name  (make-generic-op-name ~op-name-sym)}}]
+                   ~'name  (make-generic-op-name ~op-name-sym)
+                   ~'device nil}}]
           (let [^Graph graph# ~'graph]
             (-> graph# 
               (.opBuilder ~op-name (make-scoped-op-name ~'name))
               ~@(gen-add-inputs inputs)
               ~@(gen-set-attrs attrs)
+              (set-device ~'device)
               (.build)
               (.output 0)
               )))
