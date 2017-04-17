@@ -2,13 +2,14 @@
    ^{:author "Peter Feldtmann"
      :doc "A Clojure library for using TensorFlow."}
     (:require [clojure.walk :as walk]
-              [camel-snake-kebab.core :as csk])
+              [camel-snake-kebab.core :as csk]
+              [flatland.protobuf.core :as flproto])
     (:import  [org.tensorflow 
                DataType Graph Operation OperationBuilder Output 
                SavedModelBundle Shape
                Session Session$Runner Session$Run Tensor TensorFlow]
               [org.tensorflow.framework OpList OpList$Builder
-               OpDef OpDef$ArgDef OpDef$AttrDef AttrValue]
+               OpDef OpDef$ArgDef OpDef$AttrDef AttrValue ConfigProto]
               [com.google.protobuf TextFormat]
               [java.lang AutoCloseable]
               [com.cljtf AutoCloseableList]
@@ -448,8 +449,11 @@
 ;;;; simplified pre-defined operations
 
 (defn ^Output const-tensor 
-  [^Graph g ^String name ^Tensor value]
-    (-> g
+  [^Tensor value
+   & {:keys [^Graph graph name]
+       :or  {graph (get-graph)
+             name (make-generic-op-name const-tensor)}}]
+    (-> graph
       (.opBuilder "Const" (make-scoped-op-name name))
       (.setAttr "dtype" (.dataType value))
       (.setAttr "value" value)
@@ -470,17 +474,23 @@
       (.output 0))))
 
 (defn ^Output placeholder 
-  [^Graph g ^String name type]
-    (-> g
+  [data-type
+    & {:keys [^Graph graph name]
+       :or  {graph (get-graph)
+             name  (make-generic-op-name placeholder)}}]
+    (-> graph
       (.opBuilder "Placeholder" (make-scoped-op-name name))
-      (.setAttr "dtype" ^DataType (dtype type))
+      (.setAttr "dtype" ^DataType (dtype data-type))
       (.build)
       (.output 0)))
 
 (defn ^Output variable 
   "Define a variable with provided data type and shape."
-  [^Graph g ^String name data-type ^Shape shape]
-    (-> g
+  [data-type ^Shape shape
+    & {:keys [^Graph graph name]
+       :or  {graph (get-graph)
+             name  (make-generic-op-name variable)}}]
+    (-> graph
       (.opBuilder "VariableV2" (make-scoped-op-name name))
       (.setAttr "dtype" ^DataType (dtype data-type))
       (.setAttr "shape" shape)
@@ -691,10 +701,6 @@
   (:outputs (inspect-op op-name)))
 
 
-;; do the actual generation
-(generate-ops)
-
-
 ;;;; Session, Runner, Run
 
 (defn ^Session make-session
@@ -764,7 +770,7 @@
   [^Session$Run run]
   (.outputs run))
 
-(defn ^bytes get-run-metadata
+(defn get-run-metadata
   "(Experimental): Metadata about the run."
   [^Session$Run run]
   (.metadata run))
@@ -818,6 +824,12 @@
   [^Session s kwargs]
   (raw-run (make-runner s kwargs)))
 
+(defn run-and-fetch-metadata*
+  "Run fetches in given session, providing optional feeds and targets.
+   Returns the meta data."
+  [^Session s kwargs]
+  (raw-run-and-fetch-metadata (make-runner s kwargs)))
+
 (defn ^Tensor run
    "Run fetches always in new session, providing optional feeds and targets, 
    then process the result (if non-nil) via provided processor function."
@@ -833,6 +845,30 @@
        (if (and result proc-fn) 
          (proc-fn result)
          result))))
+
+(defn run-and-fetch-metadata
+   "Run fetches always in new session, providing optional feeds and targets, 
+   then process the result (if non-nil) via provided processor function."
+   [& {:keys [graph fetch fetches fetch-outputs
+              feed feed-dict feed-outputs  
+              targets target-ops options proc-fn]
+       :as kwargs
+       :or {graph (get-graph)
+            proc-fn first ;; defaults to returning first output of result
+            }}]
+   (with-new-session s graph
+     (let [meta-data (run-and-fetch-metadata* s kwargs)
+           meta-proto-bytes (get-run-metadata meta-data)
+           meta-proto-bytes-utf8 (.getBytes (String. meta-proto-bytes "UTF8"))
+           _ (println "bytes: " (String. meta-proto-bytes-utf8))
+           meta-def (flproto/protodef org.tensorflow.framework.ConfigProto)
+           _ (println "meta-def: " meta-def)
+           meta-proto (flproto/protobuf-load meta-def meta-proto-bytes-utf8)
+           _ (println "meta-proto: " meta-proto)
+           result (get-run-outputs meta-data)]
+       (if (and result proc-fn) 
+         [(proc-fn result) meta-proto]
+         [result meta-proto]))))
 
 
 ;;;; Saved Model Bundle
@@ -874,4 +910,11 @@
   [^String name ^SavedModelBundle bundle & body]
   `(with-open [~name bundle]
      ~@body))
+
+
+;; do the actual generating
+(generate-ops)
+
+'ready
+
  

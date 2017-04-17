@@ -31,7 +31,7 @@
           ;; named "MyConst" with a value "msg".
           value (tf/tensorize msg)
           
-          _ (tf/const-tensor g :my-const value)
+         _ (tf/const-tensor value :name :my-const )
           
           ;; Execute the "MyConst" operation in a Session.
           result
@@ -42,11 +42,42 @@
 
 ;;---------------------------------------------------------------------------
 
+(defn tensorflow-hello-world-with-meta-data
+  "Hello World example from web page
+   'https://www.tensorflow.org/versions/master/install/install_java'
+   'Installing TensorFlow for Java: Validate the installation'.
+   Experimental using run meta data."
+  []
+  (tf/with-new-graph g
+    (let [msg 
+          (str "Hello from TensorFlow version " (tf/get-version) "!")
+          
+          ;; Construct the computation graph with a single operation, a constant
+          ;; named "MyConst" with a value "msg".
+          value (tf/tensorize msg)
+          
+          _ (tf/const-tensor value :name :my-const )
+          
+          ;; Execute the "MyConst" operation in a Session.
+          result-and-meta
+          (tf/run-and-fetch-metadata :fetch :my-const
+                   ; :options (com.cljtf.TensorFlowUtils/fullTraceRunOptions)
+                   )
+          
+          run-meta-data 
+          (second result-and-meta)
+          ]
+      (println (tf/->string (first result-and-meta)))
+      (tf/destroy (first result-and-meta))
+      result-and-meta)))
+
+;;---------------------------------------------------------------------------
+
 (defn placeholder-demo
   "Example of using tensorFlow placeholders."
   []
   (tf/with-new-graph g
-    (let [plh1 (tf/placeholder g :x :float) ; short form
+    (let [plh1 (tf/placeholder :float :name :x) ; short form
           plh2 (tf/placeholder-op :name :y  ; via generated op 
                                   :dtype :float 
                                   :shape (tf/make-scalar-shape))
@@ -64,7 +95,7 @@
   "Example of using tensorFlow variables."
   []
   (tf/with-new-graph g
-    (let [var-x   (tf/variable g :x :float (tf/make-scalar-shape)) ; short form
+    (let [var-x   (tf/variable :float (tf/make-scalar-shape) :name :x ) ; short form
           const11 (tf/constant (float 11))            ; short form
           const22 (tf/constant (float 22) :name :c22) ; named short form
           const4  (tf/const-op :value (tf/tensorize (float 4)) ; via generated op
@@ -186,6 +217,8 @@
   (print-tensorflow-version)
   
   (tensorflow-hello-world)
+  
+  (tensorflow-hello-world-with-meta-data)
   
   (placeholder-demo)
   
