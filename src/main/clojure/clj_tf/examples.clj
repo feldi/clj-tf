@@ -2,7 +2,10 @@
     ^{:author "Peter Feldtmann"
       :doc "Usage examples for clj-tf.
             Use this as blueprints for your own stuff."}
-  (:require [clj-tf.core :as tf]))
+  (:require [clj-tf.core :as tf]
+            [clojure.repl :refer :all]))
+
+(set! *warn-on-reflection* true)
 
 ;;---------------------------------------------------------------------------
 
@@ -32,7 +35,7 @@
           
           ;; Execute the "MyConst" operation in a Session.
           result
-          (tf/run g :fetch :my-const)
+          (tf/run :fetch :my-const)
           ]
       (println (tf/->string result))
       (tf/destroy result))))
@@ -43,30 +46,34 @@
   "Example of using tensorFlow placeholders."
   []
   (tf/with-new-graph g
-    (let [ph1 (tf/placeholder g :x :float)
-          ph2 (tf/placeholder g :y :float)
+    (let [ph1 (tf/placeholder g :x :float) ; short form
+          ph2 (tf/placeholder-op :name :y  ; via generated op 
+                                 :dtype :float 
+                                 :shape (tf/make-scalar-shape))
           _   (tf/add g ph1 ph2 :name :z)
           result
-          (tf/run g :feed-dict {:x (tf/tensorize (float 11))
-                                :y (tf/tensorize (float 22)) }
-                                :fetch :z)
+          (tf/run :feed-dict {:x (tf/tensorize (float 11))
+                              :y (tf/tensorize (float 22)) }
+                  :fetch :z)
           ]
       (println "Result should be 33.0, is: " (tf/->float result)))))
 
 ;;---------------------------------------------------------------------------
 
-(defn variable-demo
+(defn variable-and-constants-demo
   "Example of using tensorFlow variables."
   []
   (tf/with-new-graph g
-    (let [var-x   (tf/variable g :x :float (tf/make-scalar-shape))
-          const11 (tf/constant g :c11 (float 11))
-          const22 (tf/constant g :c22 (float 22))
-          const4  (tf/constant g :c4  (float 4))
+    (let [var-x   (tf/variable g :x :float (tf/make-scalar-shape)) ; short form
+          const11 (tf/constant (float 11))            ; short form
+          const22 (tf/constant (float 22) :name :c22) ; named short form
+          const4  (tf/const-op :value (tf/tensorize (float 4)) ; via generated op
+                               :dtype (tf/dtype :float)
+                               :name :c4 )
           step1   (tf/assign   g   var-x const11 :name :s1) ; x = 11
           step2   (tf/assign-add g step1 const22 :name :s2) ; x = x + 22
           step3   (tf/assign-sub g step2 const4 :name :s3)  ; x = x - 4
-          result  (tf/run g :fetch-outputs [step3])         ; 29
+          result  (tf/run :graph g :fetch-outputs [step3])  ; 29
           ]
       (println "Result should be 29.0, is: " (tf/->float result)))))
 
@@ -76,14 +83,14 @@
   "Example of using a tensor input list."
   []
   (tf/with-new-graph g
-    (let [str1 (tf/constant g :str1 "Part1")
-        str2 (tf/constant g :str2 "Part2")
-        str3 (tf/constant g :str3 "Part3")
-        step (tf/string-join g 
-                             [str1 str2 str3] ; Strings to join
-                             ", "             ; Separator
-                             :name :step) 
-          result (tf/run g :fetch :step)
+    (let [str1 (tf/constant "Part1")
+          str2 (tf/constant "Part2")
+          str3 (tf/constant "Part3")
+          step (tf/string-join-op 
+                               [str1 str2 str3] ; Strings to join
+                               :separator ", "  ; Separator
+                               :name :step) 
+          result (tf/run :fetch :step)
         ]
       (println "Joint string = "(tf/->string result)))))
 
@@ -142,30 +149,29 @@
 ;         input image. If the graph were to be re-used for multiple input images, a placeholder would
 ;         have been more appropriate.
           input 
-          (tf/constant g :input imageBytes)
+          (tf/constant imageBytes :name :input)
           
           output
-          (tf/div g 
-              (tf/sub g 
-                  (tf/resize-bilinear g 
-                      (tf/expand-dims g
-                          (tf/cast g
-                             (tf/decode-jpeg g input 3)
-                             :float)
-                          (tf/constant g :make_batch (int 0)))
-                      (tf/constant g :size (int-array [h w])))                  
-                  (tf/constant g :mean mean))
-              (tf/constant g :scale scale))
+          (tf/div-op 
+              (tf/sub-op
+                  (tf/resize-bilinear-op 
+                      (tf/expand-dims-op
+                          (tf/cast-op
+                            (tf/decode-jpeg-op input :channels 3)
+                             :dst-t :float)
+                          (tf/constant (int 0) :name :make_batch ))
+                      (tf/constant (int-array [h w]) :name :size))                  
+                  (tf/constant mean))
+              (tf/constant scale))
           ]
-      (tf/run g :fetches [(-> output tf/get-output-op tf/get-raw-op-name)])))))
+      (tf/run :fetches [(-> output tf/get-output-op tf/get-raw-op-name)])))))
 
 (defn- execute-inception-graph
   [graph-def image-tensor]
   (tf/with-new-graph g 
     (tf/with-name-scope "execute-inception-graph"
       (tf/import-from-graph-def g graph-def)
-      (tf/run g 
-              :fetches [:output]
+      (tf/run :fetches [:output]
               :feed-dict {:input image-tensor}
               :proc-fn #(first (tf/->floats (first %)))))))
 
@@ -181,7 +187,7 @@
   
   (placeholder-demo)
   
-  (variable-demo)
+  (variable-and-constants-demo)
   
   (string-join-demo)
   

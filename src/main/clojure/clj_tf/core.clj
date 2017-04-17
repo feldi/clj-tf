@@ -1,7 +1,8 @@
 (ns clj-tf.core
    ^{:author "Peter Feldtmann"
      :doc "A Clojure library for using TensorFlow."}
-    (:require [clojure.walk :as walk])
+    (:require [clojure.walk :as walk]
+              [camel-snake-kebab.core :as csk])
     (:import  [org.tensorflow 
                DataType Graph Operation OperationBuilder Output 
                SavedModelBundle Shape
@@ -90,7 +91,7 @@
 (defn attr-def->map
   [^OpDef$AttrDef attr-def]
   {:name (.getName attr-def)
-   ;; TODO :type (.getType attr-def)
+   :type (.getType attr-def)
    :description (.getDescription attr-def)
    :has-minimum (.getHasMinimum attr-def)
    :minimum (.getMinimum attr-def)
@@ -101,6 +102,7 @@
 (defn arg-def->map
   [^OpDef$ArgDef arg-def]
   {:name (.getName arg-def)
+   :number-attr (.getNumberAttr arg-def)
    ;; TODO :type (.getType arg-def)
    :type-attr (.getTypeAttr arg-def)
    :type-list-attr (.getTypeListAttr arg-def)
@@ -263,7 +265,7 @@
 
 (defmacro with-tensor
   [^String name ^Tensor value & body]
-  `(with-open [~name ~value]
+  `(with-open [~name (tensorize ~value)]
        ~@body))
 
 (defn get-shape
@@ -369,6 +371,22 @@
   [^Shape s idx]
    (.size s idx))
 
+;;; OperationBuilder
+
+(defn ^OperationBuilder set-attr 
+  [^OperationBuilder op-builder attr-name value]
+  (when value
+    (if (keyword? value)
+     (.setAttr op-builder attr-name ^DataType (dtype value))
+     (.setAttr op-builder attr-name value)))
+  op-builder)
+
+(defn ^OperationBuilder set-device 
+  [^OperationBuilder op-builder ^String device]
+  (when device
+    (.setDevice op-builder device))
+  op-builder)
+
 
 ;;; Operation
 
@@ -392,7 +410,13 @@
   [^Operation op index]
   (:output op index))
 
+(defn ^Output get-op-out
+  "Get the first (and often only) output of operation."
+  [^Operation op]
+  (:output op 0))
+
 (defn ^Output make-binary-op 
+  "Build an operation with exactly two inputs."
   [^Graph g ^String type name ^Output in1 ^Output in2]
   (-> g
     (.opBuilder type (make-scoped-op-name name))
@@ -400,6 +424,20 @@
     (.addInput in2)
     (.build)
     (.output 0)))
+
+(defmacro make-generic-op-name
+  "Generate a unique operation name."
+  [op-def]
+  `(gensym (str (:name (meta #'~op-def)) "_")))
+
+(defn make-kebab-op-name
+   "Generate an operation name in 'kebab' style, i.e. with dashes."
+  [op-name]
+  (symbol (str (csk/->kebab-case op-name) "-op")))
+
+
+;;;; pre-defined operations
+;;   TODO generate this!
 
 (defn ^Output const-tensor 
   [^Graph g ^String name ^Tensor value]
@@ -411,12 +449,15 @@
       (.output 0)))
 
 (defn ^Output constant 
-  [^Graph g ^String name value]
+  [value
+   & {:keys [^Graph graph name]
+       :or  {graph (get-graph)
+             name  (make-generic-op-name constant)}}]
   (with-new-tensor ts value
-    (-> g
+    (-> graph
       (.opBuilder "Const" (make-scoped-op-name name))
       (.setAttr "dtype" (.dataType ^Tensor ts))
-      (.setAttr "value"^Tensor ts)
+      (.setAttr "value" ^Tensor ts)
       (.build)
       (.output 0))))
 
@@ -526,10 +567,11 @@
       (.output 0)))
 
 (defn ^Output div
-  [^Graph g ^Output x ^Output y
-   & {:keys [name]
-       :or {name "div"}}]
-  (make-binary-op g "Div" name x y))
+  [^Output x ^Output y
+   & {:keys [graph name]
+       :or  {graph (get-graph)
+             name "div"}}]
+  (make-binary-op graph "Div" name x y))
 
 (defn ^Output sub
   [^Graph g ^Output x ^Output y
@@ -548,6 +590,70 @@
     & {:keys [name]
        :or {name "expand-dims"}}]
   (make-binary-op g "ExpandDims" name x dim))
+
+
+;;;; Automatic generation of operations
+;;   using macro-magic
+
+; Helpers
+
+(defn gen-input-arglist
+  [input-defs]
+  (map #(symbol (csk/->kebab-case(:name %))) input-defs))
+
+(defn gen-key-names
+  [attr-defs]
+  (map #(symbol (csk/->kebab-case (:name %))) attr-defs))
+
+(defn gen-set-attr
+  [attr-def]
+  (let [sym-name (symbol (csk/->kebab-case (:name attr-def)))]
+  `(set-attr ~(:name attr-def) ~sym-name)))
+
+(defn gen-set-attrs
+  [attr-defs]
+  (map gen-set-attr attr-defs))
+
+(defn gen-add-input
+  [input-def]
+  (let [sym-name (symbol (csk/->kebab-case (:name input-def)))]
+   (if (= "N" (:number-attr input-def))
+     `(.addInputList (into-array Output ~sym-name))
+     `(.addInput ~sym-name))))
+
+(defn gen-add-inputs
+  [inputs]
+  (map gen-add-input inputs) )
+
+(defn generate-op
+ [op-name]
+ (let [op-name-sym (make-kebab-op-name op-name)
+       op-def (op-def->map op-name)
+       attrs  (:attributes op-def)
+       inputs (:inputs op-def)
+       ]
+   (println "generating op: " op-name-sym)
+   `(defn ~op-name-sym
+      [~@(gen-input-arglist inputs)
+       & {:keys [~'graph ~'name ~@(gen-key-names attrs)]
+          :or {~'graph (get-graph)
+               ~'name  (make-generic-op-name ~op-name-sym)}}]
+      (let [^Graph graph# ~'graph]
+      (-> graph# 
+        (.opBuilder ~op-name (make-scoped-op-name ~'name))
+        ~@(gen-add-inputs inputs)
+        ~@(gen-set-attrs attrs)
+        (.build)
+        (.output 0)
+        )))))
+
+(defmacro generate-ops
+  "Auto-generate all ops defined in file 'ops.pbtxt'."
+  []
+  `(do ~@(map generate-op (get-all-op-names))))
+
+;; do the actual generation
+(generate-ops)
 
 
 ;;;; Session, Runner, Run
@@ -673,17 +779,17 @@
   [^Session s kwargs]
   (raw-run (make-runner s kwargs)))
 
-(defn run
+(defn ^Tensor run
    "Run fetches always in new session, providing optional feeds and targets, 
    then process the result (if non-nil) via provided processor function."
-   [^Graph g 
-    & {:keys [fetch fetches fetch-outputs
+   [& {:keys [graph fetch fetches fetch-outputs
               feed feed-dict feed-outputs  
               targets target-ops options proc-fn]
        :as kwargs
-       :or {proc-fn first ;; defaults to returning first output of result
+       :or {graph (get-graph)
+            proc-fn first ;; defaults to returning first output of result
             }}]
-   (with-new-session s g
+   (with-new-session s graph
      (let [result (run* s kwargs)]
        (if (and result proc-fn) 
          (proc-fn result)

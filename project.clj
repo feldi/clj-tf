@@ -7,7 +7,8 @@
                  [org.tensorflow/libtensorflow "1.1.0-rc1"]
                  [org.tensorflow/libtensorflow_jni "1.1.0-rc1"]
                  [org.clojars.ghaskins/protobuf "3.0.2-2"]
-                 [com.google.protobuf/protobuf-java "3.2.0"]] 
+                 [com.google.protobuf/protobuf-java "3.2.0"]
+                 [camel-snake-kebab "0.4.0"]] 
   :plugins [[lein-protobuf "0.5.0"]]
   
   :source-paths ["src/main/clojure"]
