@@ -200,6 +200,7 @@
   ;; Working with operation definitions (defined in 'ops.pbtxt')
   (tf/get-all-op-names)
   (tf/op-def->map "Div") 
+  (tf/inspect-op-attr #'tf/decode-jpeg-op :ratio)
 
   
   ;; misc. experiments, ignore this:

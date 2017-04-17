@@ -56,6 +56,9 @@
   [^AutoCloseable obj]
   (.close obj))
 
+(defn keywordize-name
+  [name]
+  (keyword (csk/->kebab-case name)))
 
 ;;;; Operation Definitions
 
@@ -91,6 +94,8 @@
 (defn attr-def->map
   [^OpDef$AttrDef attr-def]
   {:name (.getName attr-def)
+   ;; clj-tf style name
+   :keywordized-name (keywordize-name (.getName attr-def))
    :type (.getType attr-def)
    :description (.getDescription attr-def)
    :has-minimum (.getHasMinimum attr-def)
@@ -102,6 +107,8 @@
 (defn arg-def->map
   [^OpDef$ArgDef arg-def]
   {:name (.getName arg-def)
+    ;; clj-tf style name
+   :keywordized-name (keywordize-name (.getName arg-def))
    :number-attr (.getNumberAttr arg-def)
    ;; TODO :type (.getType arg-def)
    :type-attr (.getTypeAttr arg-def)
@@ -237,7 +244,7 @@
   (.opBuilder g type (make-scoped-op-name name)))
 
 (defn get-op-by-name
-  [^Graph g ^String name]
+  [^Graph g name]
   (.operation g (make-scoped-op-name name)))
 
 (defn has-node
@@ -371,10 +378,11 @@
   [^Shape s idx]
    (.size s idx))
 
+
 ;;; OperationBuilder
 
 (defn ^OperationBuilder set-attr 
-  [^OperationBuilder op-builder attr-name value]
+  [^OperationBuilder op-builder ^String attr-name value]
   (when value
     (if (keyword? value)
      (.setAttr op-builder attr-name ^DataType (dtype value))
@@ -406,24 +414,24 @@
   [^Operation op]
   (.numOutputs op))
 
-(defn ^Output get-op-output
+(defn ^Output get-op-output-idx
   [^Operation op index]
   (:output op index))
 
-(defn ^Output get-op-out
+(defn ^Output get-op-output
   "Get the first (and often only) output of operation."
   [^Operation op]
   (:output op 0))
 
-(defn ^Output make-binary-op 
-  "Build an operation with exactly two inputs."
-  [^Graph g ^String type name ^Output in1 ^Output in2]
-  (-> g
-    (.opBuilder type (make-scoped-op-name name))
-    (.addInput in1)
-    (.addInput in2)
-    (.build)
-    (.output 0)))
+#_(defn ^Output make-binary-op 
+   "Build an operation with exactly two inputs."
+   [^Graph g ^String type name ^Output in1 ^Output in2]
+   (-> g
+     (.opBuilder type (make-scoped-op-name name))
+     (.addInput in1)
+     (.addInput in2)
+     (.build)
+     (.output 0)))
 
 (defmacro make-generic-op-name
   "Generate a unique operation name."
@@ -632,24 +640,52 @@
        inputs (:inputs op-def)
        ]
    (println "generating op: " op-name-sym)
-   `(defn ~op-name-sym
-      [~@(gen-input-arglist inputs)
-       & {:keys [~'graph ~'name ~@(gen-key-names attrs)]
-          :or {~'graph (get-graph)
-               ~'name  (make-generic-op-name ~op-name-sym)}}]
-      (let [^Graph graph# ~'graph]
-      (-> graph# 
-        (.opBuilder ~op-name (make-scoped-op-name ~'name))
-        ~@(gen-add-inputs inputs)
-        ~@(gen-set-attrs attrs)
-        (.build)
-        (.output 0)
-        )))))
+   `(do (defn ^{:op-name ~op-name} ~op-name-sym
+          [~@(gen-input-arglist inputs)
+           & {:keys [~'graph ~'name ~@(gen-key-names attrs)]
+              :or {~'graph (get-graph)
+                   ~'name  (make-generic-op-name ~op-name-sym)}}]
+          (let [^Graph graph# ~'graph]
+            (-> graph# 
+              (.opBuilder ~op-name (make-scoped-op-name ~'name))
+              ~@(gen-add-inputs inputs)
+              ~@(gen-set-attrs attrs)
+              (.build)
+              (.output 0)
+              )))
+      (alter-meta! #'~op-name-sym assoc :original-op-name ~op-name)
+      )))
 
 (defmacro generate-ops
   "Auto-generate all ops defined in file 'ops.pbtxt'."
   []
   `(do ~@(map generate-op (get-all-op-names))))
+
+;; inspect operation details
+(defn inspect-op
+  [op-name]
+  (op-def->map (:original-op-name (meta op-name))))
+
+(defn inspect-op-attrs
+  [op-name]
+  (:attributes (inspect-op op-name)))
+
+(defn inspect-op-attr
+  [op-name attr-name]
+  (if (keyword? attr-name)
+    (filter #(= attr-name (:keywordized-name %))
+            (:attributes (inspect-op op-name)))
+    (filter #(= attr-name (:name %))
+            (:attributes (inspect-op op-name)))))
+
+(defn inspect-op-ins
+  [op-name]
+  (:inputs (inspect-op op-name)))
+
+(defn inspect-op-outs
+  [op-name]
+  (:outputs (inspect-op op-name)))
+
 
 ;; do the actual generation
 (generate-ops)
