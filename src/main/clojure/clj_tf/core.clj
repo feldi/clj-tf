@@ -436,8 +436,7 @@
   (symbol (str (csk/->kebab-case op-name) "-op")))
 
 
-;;;; pre-defined operations
-;;   TODO generate this!
+;;;; simplified pre-defined operations
 
 (defn ^Output const-tensor 
   [^Graph g ^String name ^Tensor value]
@@ -479,22 +478,22 @@
       (.build)
       (.output 0)))
 
-(defn ^Output assign 
-  "Assign a (first or new) value to a variable."
+#_(defn ^Output assign 
+   "Assign a (first or new) value to a variable."
   [^Graph g ref ^Output value
-    & {:keys [name]
+     & {:keys [name]
        :or {name "Assign"}}]
     (-> g
       (.opBuilder "Assign" (make-scoped-op-name name))
-      (.addInput ref)
-      (.addInput value)
+       (.addInput ref)
+       (.addInput value)
       (.build)
       (.output 0)))
 
-(defn ^Output assign-add 
-  "Add value to the current state of a variable."
+#_(defn ^Output assign-add 
+   "Add value to the current state of a variable."
   [^Graph g ref ^Output value
-    & {:keys [name]
+     & {:keys [name]
        :or {name "AssignAdd"}}]
     (-> g
       (.opBuilder "AssignAdd" (make-scoped-op-name name))
@@ -503,10 +502,10 @@
       (.build)
       (.output 0)))
 
-(defn ^Output assign-sub 
-  "Subtract value from the current state of a variable."
+#_(defn ^Output assign-sub 
+   "Subtract value from the current state of a variable."
   [^Graph g ref ^Output value
-   & {:keys [name]
+    & {:keys [name]
        :or {name "AssignSub"}}]
     (-> g
       (.opBuilder "AssignSub" (make-scoped-op-name name))
@@ -515,48 +514,48 @@
       (.build)
       (.output 0)))
 
-(defn ^Output string-join 
+#_(defn ^Output string-join 
   [^Graph g ins ^String sep
-   & {:keys [name]
+    & {:keys [name]
        :or {name "StringJoin"}}]
     (-> g
       (.opBuilder "StringJoin" (make-scoped-op-name name))
-      (.addInputList (into-array Output ins))
+       (.addInputList (into-array Output ins))
       (.setAttr "separator" sep)
-      (.setAttr "N" (count ins))
+       (.setAttr "N" (count ins))
       (.build)
       (.output 0)))
 
-(defn ^Output decode-jpeg 
+#_(defn ^Output decode-jpeg 
   [^Graph g ^Output contents channels
-   & {:keys [name]
+    & {:keys [name]
        :or {name "decodeJpeg"}}]
-    (-> g
+     (-> g
       (.opBuilder "DecodeJpeg" (make-scoped-op-name name))
       (.addInput contents)
       (.setAttr "channels" (long channels))
       (.build)
       (.output 0)))
     
-(defn ^Output cast 
+#_(defn ^Output cast 
   [^Graph g ^Output value type
-   & {:keys [name]
+    & {:keys [name]
        :or {name "cast"}}]
-    (-> g
+     (-> g
       (.opBuilder "Cast" (make-scoped-op-name name))
       (.addInput value)
       (.setAttr "DstT" ^DataType (dtype type))
       (.build)
       (.output 0)))
 
-(defn ^Output add
+#_(defn ^Output add
   [^Graph g ^Output x ^Output y
-    & {:keys [name]
+     & {:keys [name]
        :or {name "add"}}]
   (make-binary-op g "Add" name x y))
 
-(defn ^Output add-n
-  "Add all input tensors element wise."
+#_(defn ^Output add-n
+   "Add all input tensors element wise."
   [^Graph g ins 
     & {:keys [name]
        :or {name "addN"}}]
@@ -566,28 +565,28 @@
       (.build)
       (.output 0)))
 
-(defn ^Output div
-  [^Output x ^Output y
-   & {:keys [graph name]
+#_(defn ^Output div
+   [^Output x ^Output y
+    & {:keys [graph name]
        :or  {graph (get-graph)
-             name "div"}}]
-  (make-binary-op graph "Div" name x y))
+              name "div"}}]
+   (make-binary-op graph "Div" name x y))
 
-(defn ^Output sub
+#_(defn ^Output sub
   [^Graph g ^Output x ^Output y
-   & {:keys [name]
+    & {:keys [name]
        :or {name "sub"}}]
   (make-binary-op g "Sub" name x y))
 
-(defn ^Output resize-bilinear
+#_(defn ^Output resize-bilinear
   [^Graph g ^Output images ^Output size
-   & {:keys [name]
+    & {:keys [name]
        :or {name "resize-bilinear"}}]
   (make-binary-op g "ResizeBilinear" name images size))
 
-(defn ^Output expand-dims
+#_(defn ^Output expand-dims
   [^Graph g ^Output x ^Output dim
-    & {:keys [name]
+     & {:keys [name]
        :or {name "expand-dims"}}]
   (make-binary-op g "ExpandDims" name x dim))
 

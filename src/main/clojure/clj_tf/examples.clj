@@ -46,11 +46,11 @@
   "Example of using tensorFlow placeholders."
   []
   (tf/with-new-graph g
-    (let [ph1 (tf/placeholder g :x :float) ; short form
-          ph2 (tf/placeholder-op :name :y  ; via generated op 
-                                 :dtype :float 
-                                 :shape (tf/make-scalar-shape))
-          _   (tf/add g ph1 ph2 :name :z)
+    (let [plh1 (tf/placeholder g :x :float) ; short form
+          plh2 (tf/placeholder-op :name :y  ; via generated op 
+                                  :dtype :float 
+                                  :shape (tf/make-scalar-shape))
+          _   (tf/add-op plh1 plh2 :name :z)
           result
           (tf/run :feed-dict {:x (tf/tensorize (float 11))
                               :y (tf/tensorize (float 22)) }
@@ -70,9 +70,9 @@
           const4  (tf/const-op :value (tf/tensorize (float 4)) ; via generated op
                                :dtype (tf/dtype :float)
                                :name :c4 )
-          step1   (tf/assign   g   var-x const11 :name :s1) ; x = 11
-          step2   (tf/assign-add g step1 const22 :name :s2) ; x = x + 22
-          step3   (tf/assign-sub g step2 const4 :name :s3)  ; x = x - 4
+          step1   (tf/assign-op var-x const11 :name :s1) ; x = 11
+          step2   (tf/assign-add-op step1 const22 :name :s2) ; x = x + 22
+          step3   (tf/assign-sub-op step2 const4 :name :s3)  ; x = x - 4
           result  (tf/run :graph g :fetch-outputs [step3])  ; 29
           ]
       (println "Result should be 29.0, is: " (tf/->float result)))))
@@ -88,7 +88,7 @@
           str3 (tf/constant "Part3")
           step (tf/string-join-op 
                                [str1 str2 str3] ; Strings to join
-                               :separator ", "  ; Separator
+                               :separator ", "  
                                :name :step) 
           result (tf/run :fetch :step)
         ]
