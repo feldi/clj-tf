@@ -61,7 +61,13 @@
   [name]
   (keyword (csk/->kebab-case name)))
 
+
 ;;;; Operation Definitions
+
+(defn get-all-registered-ops
+  "All the TensorFlow operations available in this address space."
+  []
+  (String. (byte-array(TensorFlow/registeredOpList)) "UTF8"))
 
 (defn get-all-op-defs* 
   "Get a list of all registered operation definitions,
@@ -859,11 +865,11 @@
    (with-new-session s graph
      (let [meta-data (run-and-fetch-metadata* s kwargs)
            meta-proto-bytes (get-run-metadata meta-data)
-           meta-proto-bytes-utf8 (.getBytes (String. meta-proto-bytes "UTF8"))
-           _ (println "bytes: " (String. meta-proto-bytes-utf8))
+;           meta-proto-bytes-utf8 (.getBytes (String. meta-proto-bytes "UTF8"))
+;           _ (println "bytes: " (String. meta-proto-bytes-utf8))
            meta-def (flproto/protodef org.tensorflow.framework.ConfigProto)
            _ (println "meta-def: " meta-def)
-           meta-proto (flproto/protobuf-load meta-def meta-proto-bytes-utf8)
+           meta-proto (flproto/protobuf-load meta-def meta-proto-bytes)
            _ (println "meta-proto: " meta-proto)
            result (get-run-outputs meta-data)]
        (if (and result proc-fn) 

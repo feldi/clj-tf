@@ -4,8 +4,8 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.8.0"] 
-                 [org.tensorflow/libtensorflow "1.1.0"]
-                 [org.tensorflow/libtensorflow_jni "1.1.0"]
+                 [org.tensorflow/libtensorflow "1.5.0"]
+                 [org.tensorflow/libtensorflow_jni "1.5.0"]
                  [org.clojars.ghaskins/protobuf "3.0.2-2"]
                  [com.google.protobuf/protobuf-java "3.2.0"]
                  [camel-snake-kebab "0.4.0"]] 
